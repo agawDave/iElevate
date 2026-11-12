@@ -1,7 +1,7 @@
 const { pool } = require('../config/db');
 
 // Pre-test / post-test state for one learner on one topic with one specialist
-// (see module_tests_migration.sql).
+// (tables module_test_questions and module_test_attempts).
 
 function parseJson(value, fallback) {
   try {

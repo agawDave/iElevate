@@ -97,60 +97,20 @@ specialist was chosen.
 
 ### Setup
 
-After the existing schema, skill, module, resource, and module-messaging migrations,
-run these against `ielevate_db`, in order:
+The whole database is built by one file, `backend/database/setup_fresh_database.sql`
+(every table, the ELEVATE topics and skills, the official materials; no accounts).
+Import it in phpMyAdmin, as described in "Getting started" in `README.md`.
 
-1. `backend/database/elevate_curriculum_matching_migration.sql`
-2. `backend/database/elevate_training_design_migration.sql`: creates the topic modules
-   and the circumstances table, retires the whole-phase Phase 1/2 modules, and hides
-   Phase 3/4 (`pending`) until their training designs name resource persons. Safe to re-run.
-3. `backend/database/specialist_materials_migration.sql`: lets specialists attach their
-   own materials (adds the `excel` resource type and `module_resources.uploaded_by`).
-   Safe to re-run.
-4. `backend/database/elevate_skill_check_migration.sql`: adds the skill-check tables,
-   the specialist teaching-detail columns, the `queued` (next up) assignment status, and
-   the Phase 3 topic modules. Safe to re-run.
-5. `backend/database/profile_demographics_migration.sql`: adds sex, age, work status and
-   mobile number to users, so the Profile page holds demographic data only. The skill
-   check and circumstances live on **My Learning Plan** (`/learning-plan`). Safe to re-run.
-6. `backend/database/advisor_feedback_migration.sql` (project-advisor feedback): birthdate,
-   civil status, education, sector tags and a typed address with the PSGC region code on
-   the Profile; the skill check's "Tell us more" note; specialist-issued certificates; and
-   the `completed` learning status. Safe to re-run.
-7. `backend/database/certificate_upload_migration.sql`: lets specialists upload the
-   certificate they made for each learner (see "Certificates" below). Safe to re-run.
-8. `backend/database/module_sessions_index_migration.sql`: indexes topic sessions by
-   learner-specialist pair. Safe to re-run.
-9. `backend/database/module_applications_migration.sql`: adds the apply → accept flow
-   (see "Modules page" below). Existing matches that had already started stay accepted.
-   Ones nobody had started become topics the learner applies to. Safe to re-run.
-10. `backend/database/module_activities_migration.sql`: specialist-made module activities
-    and learners' answers (see "Module activities" below). Safe to re-run.
-11. `backend/database/activity_log_migration.sql`: the activity log behind the admin
-    Reports and Activity log pages (see "Admin reports and activity log" below). It
-    fills in earlier activity from saved dates. Safe to re-run.
-12. `backend/database/file_task_migration.sql`: file tasks, a third kind of module
-    activity built from a file the specialist uploads (see "Module activities"
-    below). Safe to re-run.
-13. `backend/database/module_tests_migration.sql`: a pre-test and post-test for each
-    module (see "Pre-test and post-test" below). Safe to re-run.
-14. `backend/database/portfolio_items_migration.sql`: reflections, rubric scores, and the
-    projects, awards and photos beneficiaries add to their portfolio (see "Learning
-    portfolio" below). Safe to re-run.
-15. `backend/database/career_portfolio_migration.sql`: the Career tab of My Portfolio:
-    resume, work-sample picks, licenses and recommendations (see "Career portfolio"
-    below). Safe to re-run.
-16. `cd backend` then `node database/seed_training_design_specialists.js`: creates a
-    specialist account for each Phase 1–3 resource person, linked to their topics. Each
-    signs in with their first name at Gmail (e.g. `naomi@gmail.com`; compound first
-    names drop the space or hyphen: `johnlemnil@gmail.com`, `jaean@gmail.com`).
-    Passwords are not stored in the script. Choose them when you run it:
-    - PowerShell: `$env:SEED_PASSWORD_PATTERN='{login}12345'; node database/seed_training_design_specialists.js`
-      gives each person their first name + 12345 (e.g. `naomi12345`).
-    - `SEED_SPECIALIST_PASSWORD=...` gives everyone one shared password.
-    - Neither prints one random temporary password.
-
-    Existing accounts are left as they are.
+- **Specialists:** each signs up and chooses **Specialist**, picks their topics on
+  **My Teaching Plan**, then creates a module for each topic on **Modules** for the
+  admin to approve.
+- **Admin:** sign up, then run `UPDATE users SET role = 'admin' WHERE email = '...';` in
+  phpMyAdmin.
+- **Changing the database** (a new table or column): make the change in your local
+  `ielevate_db`, then run
+  `powershell -ExecutionPolicy Bypass -File backend\database\export_setup_sql.ps1`
+  so the setup file includes it. The script copies structure and ELEVATE reference
+  data only, never accounts.
 
 Topic modules link to these protected files in `backend/module-resources/`:
 

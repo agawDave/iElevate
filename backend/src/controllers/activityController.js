@@ -3,8 +3,8 @@ const { logActivity } = require('../lib/activityLog');
 const { checkActivityFile, removeActivityFile, TYPE_MESSAGE } = require('../middleware/activityFileUpload');
 const { loadTestState, attemptDto, attemptReview } = require('../lib/moduleTests');
 
-// Specialist-made module activities (see module_activities_migration.sql and
-// file_task_migration.sql). A learner answers the activities of the specialist
+// Specialist-made module activities (tables module_activities and
+// module_activity_answers). A learner answers the activities of the specialist
 // who accepted them for that topic; the correct choice of a multiple-choice
 // question never leaves the server for learners.
 //   multiple_choice - checked at once, try again until right

@@ -12,8 +12,7 @@
 -- stops at the first table and changes nothing. To start over, delete the
 -- ielevate_db database in phpMyAdmin first.
 --
--- Made from the project's own database on 2026-11-12 (replaces running the
--- older migration files one by one).
+-- Made from the project's own database on 2026-11-12 by export_setup_sql.ps1.
 
 CREATE DATABASE IF NOT EXISTS `ielevate_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `ielevate_db`;

@@ -1,6 +1,6 @@
 const { pool } = require('../config/db');
 
-// Records one thing a user did (see activity_log_migration.sql). Called after
+// Records one thing a user did (table user_activity_log). Called after
 // the action succeeded; a logging problem never breaks the action itself.
 //   userId       - who did it
 //   action       - e.g. 'login', 'applied', 'accepted', 'message_sent'

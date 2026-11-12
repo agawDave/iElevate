@@ -3,7 +3,7 @@ const { logActivity } = require('../lib/activityLog');
 const { loadTestState, loadActivityProgress, attemptDto, parseJson } = require('../lib/moduleTests');
 const { canAuthor, learnerAssignment, notify } = require('./activityController');
 
-// Pre-test and post-test for a module (see module_tests_migration.sql).
+// Pre-test and post-test for a module (tables module_test_questions and module_test_attempts).
 // The specialist writes multiple-choice questions; the learner answers the
 // same questions before the activities and after them. The correct choices
 // never reach the learner until their post-test is done.

@@ -4,7 +4,7 @@ const { checkActivityFile, removeActivityFile } = require('../middleware/activit
 const { withUpload, notify, learnerAssignment } = require('./activityController');
 const { isBeneficiary } = require('./portfolioController');
 
-// The Career tab of My Portfolio (see career_portfolio_migration.sql): the
+// The Career tab of My Portfolio (tables career_profiles, career_entries and career_recommendations): the
 // resume, and recommendations the beneficiary asks their specialists for.
 const MAX_OBJECTIVE = 1000;
 const MAX_OTHER_SKILLS = 500;
