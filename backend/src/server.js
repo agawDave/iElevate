@@ -6,7 +6,8 @@ const { testConnection } = require('./config/db');
 const PORT = process.env.PORT || 5000;
 
 const httpServer = http.createServer(app);
-initSockets(httpServer);
+// Controllers emit live updates (e.g. a session proposed in the chat).
+app.set('io', initSockets(httpServer));
 
 async function start() {
   try {

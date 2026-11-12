@@ -1,5 +1,6 @@
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import elevateLogo from '../assets/elevate-logo.png';
 
 const FEATURES = [
   {
@@ -76,10 +77,10 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
-      <header className="border-b border-stone-200">
+      <header className="border-b border-stone-200 bg-white">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <span className="font-bold text-brand-600 text-lg">iElevate</span>
-          <nav className="hidden md:flex items-center gap-8 text-sm text-slate-600">
+          <img src={elevateLogo} alt="iELEVATE" className="h-12 w-auto" />
+          <nav className="hidden md:flex items-center gap-8 text-[15px] font-medium text-slate-800">
             <a href="#features" className="hover:text-slate-900">
               How it works
             </a>
@@ -91,12 +92,12 @@ export default function LandingPage() {
             </a>
           </nav>
           <div className="flex items-center gap-3">
-            <Link to="/login" className="text-sm font-medium px-4 py-2 rounded-full hover:bg-stone-100">
+            <Link to="/login" className="text-sm font-semibold text-brand-600 px-4 py-2 rounded-lg hover:bg-brand-50">
               Log in
             </Link>
             <Link
               to="/signup"
-              className="text-sm font-medium px-4 py-2 rounded-full bg-brand-600 hover:bg-brand-700 text-white"
+              className="text-sm font-semibold px-4 py-2 rounded-lg bg-accent-500 hover:bg-accent-550 text-brand-900"
             >
               Get started
             </Link>
@@ -104,12 +105,13 @@ export default function LandingPage() {
         </div>
       </header>
 
-      <section className="max-w-3xl mx-auto px-6 py-20 text-center">
-        <span className="inline-block text-xs font-medium bg-brand-50 text-brand-700 rounded-full px-3 py-1.5 mb-6">
+      <section className="bg-gradient-to-b from-brand-50 to-white">
+      <div className="max-w-3xl mx-auto px-6 py-20 text-center">
+        <span className="inline-block text-xs font-semibold uppercase tracking-wider text-accent-600 mb-6">
           ✦ Skill exchange for Filipino students
         </span>
-        <h1 className="text-5xl font-bold leading-tight mb-1">Learn by doing.</h1>
-        <h1 className="text-5xl font-bold leading-tight text-brand-600 mb-5">Grow by sharing.</h1>
+        <h1 className="text-5xl font-extrabold leading-tight mb-1 tracking-tight">Learn by doing.</h1>
+        <h1 className="text-5xl font-extrabold leading-tight text-brand-600 mb-5 tracking-tight">Grow by sharing.</h1>
         <p className="text-slate-500 max-w-xl mx-auto mb-8">
           Connect with specialists, exchange skills, and earn verified blockchain credentials — built for
           college students.
@@ -117,51 +119,60 @@ export default function LandingPage() {
         <div className="flex items-center justify-center gap-3">
           <Link
             to="/signup"
-            className="rounded-full bg-brand-600 hover:bg-brand-700 text-white px-6 py-3 text-sm font-medium"
+            className="rounded-lg bg-accent-500 hover:bg-accent-550 text-brand-900 px-6 py-3 text-sm font-semibold"
           >
             Start learning free
           </Link>
           <a
             href="#features"
-            className="rounded-full border border-stone-300 hover:bg-stone-50 px-6 py-3 text-sm font-medium"
+            className="rounded-lg border border-brand-600 text-brand-600 hover:bg-brand-50 px-6 py-3 text-sm font-semibold"
           >
             See how it works
           </a>
         </div>
+      </div>
       </section>
 
-      <section className="border-y border-stone-200">
-        <div className="max-w-4xl mx-auto px-6 py-8 grid grid-cols-3 divide-x divide-stone-200 text-center">
-          <div>
-            <p className="text-2xl font-bold">2,400+</p>
+      <section className="max-w-4xl mx-auto px-6 py-8">
+        <div className="grid grid-cols-3 divide-x divide-stone-200 rounded-xl border border-stone-200 bg-white text-center">
+          <div className="py-6">
+            <p className="text-3xl font-extrabold text-brand-600">2,400+</p>
             <p className="text-sm text-slate-500">Active students</p>
           </div>
-          <div>
-            <p className="text-2xl font-bold">180+</p>
+          <div className="py-6">
+            <p className="text-3xl font-extrabold text-brand-600">180+</p>
             <p className="text-sm text-slate-500">Skill categories</p>
           </div>
-          <div>
-            <p className="text-2xl font-bold">98%</p>
+          <div className="py-6">
+            <p className="text-3xl font-extrabold text-brand-600">98%</p>
             <p className="text-sm text-slate-500">Match satisfaction</p>
           </div>
         </div>
       </section>
 
-      <section id="features" className="max-w-5xl mx-auto px-6 py-20">
-        <p className="text-xs font-semibold text-brand-600 uppercase tracking-wide mb-2">Features</p>
-        <h2 className="text-2xl font-bold mb-8">Everything you need to grow</h2>
+      <section id="features" className="bg-stone-50">
+      <div className="max-w-5xl mx-auto px-6 py-20">
+        <p className="text-xs font-semibold text-accent-600 uppercase tracking-wider mb-2">Features</p>
+        <h2 className="text-3xl font-extrabold tracking-tight mb-8">Everything you need to grow</h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {FEATURES.map((f) => (
-            <div key={f.title} className="bg-stone-50 rounded-xl p-5">
-              <div className="w-9 h-9 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center mb-3">
+            <div key={f.title} className="bg-white border border-stone-200 rounded-2xl p-5">
+              <div className="w-10 h-10 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center mb-3">
                 {f.icon}
               </div>
-              <p className="font-medium mb-1">{f.title}</p>
+              <p className="font-bold mb-1">{f.title}</p>
               <p className="text-sm text-slate-500">{f.desc}</p>
             </div>
           ))}
         </div>
+      </div>
       </section>
+
+      <footer className="bg-brand-700 text-white">
+        <div className="max-w-6xl mx-auto px-6 py-6 text-sm text-brand-100">
+          © {new Date().getFullYear()} Cebu Technological University – Tuburan Campus
+        </div>
+      </footer>
     </div>
   );
 }

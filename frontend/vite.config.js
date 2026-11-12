@@ -7,13 +7,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
+      includeAssets: ['favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
         name: 'iElevate',
         short_name: 'iElevate',
-        description: 'Peer-to-peer skill exchange for students, job seekers, and entrepreneurs',
-        theme_color: '#1E40AF',
-        background_color: '#0F172A',
+        description: 'The ELEVATE program of CTU-Tuburan: learn digital skills with a specialist, one topic at a time.',
+        theme_color: '#022A49',
+        background_color: '#F5F7F9',
         display: 'standalone',
         start_url: '/',
         icons: [

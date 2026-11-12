@@ -1,4 +1,14 @@
 node_modules/
+# Learner certificates contain personal data
+backend/certificates/
+# Files people upload through the app (profile photos, answers, module materials)
+backend/uploads/
+backend/activity-files/
+backend/module-resources/
+# Python helper environment, not needed to run the app
+.venv/
+# Stray test file in the project root
+/-
 .env
 .env.local
 dist/

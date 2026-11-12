@@ -13,7 +13,29 @@ async function listMyCredentials(req, res) {
      ORDER BY cr.created_at DESC`,
     [req.user.id]
   );
-  res.json({ success: true, data: rows });
+  // Module certificates: the specialist who issued it (ELEVATE topics have no
+  // owner), and the certificate file they uploaded, if any.
+  const [moduleCertificates] = await pool.query(
+    `SELECT mc.id, 'issued' AS status, NULL AS token_id, NULL AS contract_address,
+            NULL AS chain, NULL AS tx_hash, NULL AS metadata_uri, mc.issued_at,
+            lm.title AS skill_name, lm.phase, COALESCE(issuer.full_name, owner.full_name) AS issuer_name,
+            mc.certificate_code, mc.file_storage_name IS NOT NULL AS has_file,
+            mc.file_original_name, mc.file_mime_type
+     FROM module_certificates mc
+     JOIN learning_modules lm ON lm.id = mc.module_id
+     LEFT JOIN users issuer ON issuer.id = mc.issued_by
+     LEFT JOIN users owner ON owner.id = lm.owner_id
+     WHERE mc.user_id = ?
+     ORDER BY mc.issued_at DESC`,
+    [req.user.id]
+  );
+  res.json({
+    success: true,
+    data: [
+      ...rows.map((row) => ({ ...row, kind: 'blockchain' })),
+      ...moduleCertificates.map((row) => ({ ...row, kind: 'certificate', has_file: Boolean(row.has_file) })),
+    ].sort((a, b) => new Date(b.issued_at || 0) - new Date(a.issued_at || 0)),
+  });
 }
 
 // Called after an exchange is marked 'completed' by both parties.

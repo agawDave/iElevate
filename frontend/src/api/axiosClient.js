@@ -11,11 +11,15 @@ axiosClient.interceptors.request.use((config) => {
 });
 
 // Auto-refresh access token once on a 401, then retry the original request.
+// Not for signing in or up: there a 401 means a wrong email or password, and
+// the page should show that message instead of reloading.
+const AUTH_REQUEST = /\/auth\/(login|register|refresh)$/;
+
 axiosClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
+    if (error.response?.status === 401 && original && !original._retry && !AUTH_REQUEST.test(original.url || '')) {
       original._retry = true;
       try {
         const refreshToken = localStorage.getItem('refreshToken');

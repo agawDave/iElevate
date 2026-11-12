@@ -8,7 +8,8 @@ INSERT INTO skill_categories (name, slug) VALUES
   ('Business & Career', 'business-career'),
   ('Academic Tutoring', 'academic-tutoring'),
   ('Fitness & Wellness', 'fitness-wellness'),
-  ('Trades & DIY', 'trades-diy');
+  ('Trades & DIY', 'trades-diy'),
+  ('Digital Employment & Entrepreneurship', 'digital-employment-entrepreneurship');
 
 INSERT INTO skills (category_id, name, slug) VALUES
   ((SELECT id FROM skill_categories WHERE slug='programming-tech'), 'JavaScript', 'javascript'),
@@ -55,4 +56,17 @@ INSERT INTO skills (category_id, name, slug) VALUES
   ((SELECT id FROM skill_categories WHERE slug='trades-diy'), 'Woodworking', 'woodworking'),
   ((SELECT id FROM skill_categories WHERE slug='trades-diy'), 'Home Electrical Basics', 'home-electrical-basics'),
   ((SELECT id FROM skill_categories WHERE slug='trades-diy'), 'Cooking', 'cooking'),
-  ((SELECT id FROM skill_categories WHERE slug='trades-diy'), 'Gardening', 'gardening');
+  ((SELECT id FROM skill_categories WHERE slug='trades-diy'), 'Gardening', 'gardening'),
+
+  ((SELECT id FROM skill_categories WHERE slug='digital-employment-entrepreneurship'), 'Digital Literacy', 'digital-literacy'),
+  ((SELECT id FROM skill_categories WHERE slug='digital-employment-entrepreneurship'), 'English Communication', 'english-communication'),
+  ((SELECT id FROM skill_categories WHERE slug='digital-employment-entrepreneurship'), 'Office Productivity Applications', 'office-productivity-applications'),
+  ((SELECT id FROM skill_categories WHERE slug='digital-employment-entrepreneurship'), 'Freelancing', 'freelancing'),
+  ((SELECT id FROM skill_categories WHERE slug='digital-employment-entrepreneurship'), 'Online Marketplace Skills', 'online-marketplace-skills'),
+  ((SELECT id FROM skill_categories WHERE slug='digital-employment-entrepreneurship'), 'Remote Work Setup', 'remote-work-setup'),
+  ((SELECT id FROM skill_categories WHERE slug='digital-employment-entrepreneurship'), 'WordPress', 'wordpress'),
+  ((SELECT id FROM skill_categories WHERE slug='digital-employment-entrepreneurship'), 'Virtual Assistance', 'virtual-assistance'),
+  ((SELECT id FROM skill_categories WHERE slug='digital-employment-entrepreneurship'), 'Digital Marketing', 'digital-marketing'),
+  ((SELECT id FROM skill_categories WHERE slug='digital-employment-entrepreneurship'), 'Entrepreneurship', 'entrepreneurship'),
+  ((SELECT id FROM skill_categories WHERE slug='digital-employment-entrepreneurship'), 'E-commerce', 'e-commerce'),
+  ((SELECT id FROM skill_categories WHERE slug='digital-employment-entrepreneurship'), 'Digital Content Creation', 'digital-content-creation');

@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../config/db');
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../config/jwt');
+const { logActivity } = require('../lib/activityLog');
 
 async function register(req, res) {
   const { fullName, email, password, schoolOrOrg, userType } = req.body;
@@ -26,6 +27,7 @@ async function register(req, res) {
   const refreshToken = signRefreshToken(tokenPayload);
   const user = { id: result.insertId, uuid, fullName, email, role: 'user', userType: resolvedUserType };
 
+  await logActivity({ userId: result.insertId, action: 'registered', details: `Joined as ${resolvedUserType}` });
   res.status(201).json({ success: true, data: { accessToken, refreshToken, user } });
 }
 
@@ -42,7 +44,17 @@ async function login(req, res) {
     return res.status(401).json({ success: false, message: 'Invalid credentials' });
   }
   if (dbUser.status !== 'active') {
-    return res.status(403).json({ success: false, message: `Account is ${dbUser.status}` });
+    const [admins] = await pool.query(
+      `SELECT full_name, email FROM users
+       WHERE role = 'admin' AND status = 'active'
+       ORDER BY id ASC LIMIT 1`
+    );
+    return res.status(403).json({
+      success: false,
+      message: `Account is ${dbUser.status}`,
+      accountStatus: dbUser.status,
+      adminContact: admins[0] || null,
+    });
   }
 
   const match = await bcrypt.compare(password, dbUser.password_hash);
@@ -51,6 +63,7 @@ async function login(req, res) {
   }
 
   await pool.query('UPDATE users SET last_login_at = NOW() WHERE id = ?', [dbUser.id]);
+  await logActivity({ userId: dbUser.id, action: 'login' });
 
   const payload = { id: dbUser.id, uuid: dbUser.uuid, role: dbUser.role };
   const accessToken = signAccessToken(payload);

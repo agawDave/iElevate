@@ -164,6 +164,7 @@ CREATE TABLE conversations (
   CONSTRAINT fk_conv_user_a FOREIGN KEY (user_a_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_conv_user_b FOREIGN KEY (user_b_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_conv_exchange FOREIGN KEY (exchange_id) REFERENCES skill_exchanges(id) ON DELETE SET NULL,
+  KEY idx_conversation_user_a (user_a_id),
   UNIQUE KEY uq_conversation_pair (user_a_id, user_b_id)
 ) ENGINE=InnoDB;
 

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import * as authApi from '../api/authApi';
+import axiosClient from '../api/axiosClient';
 
 const AuthContext = createContext(null);
 
@@ -9,9 +10,27 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
-    if (stored) setUser(JSON.parse(stored));
+    if (stored) {
+      const storedUser = JSON.parse(stored);
+      setUser(storedUser);
+      refreshProfile();
+    }
     setLoading(false);
   }, []);
+
+  async function refreshProfile() {
+    if (!localStorage.getItem('accessToken')) return;
+    try {
+      const { data } = await axiosClient.get('/users/me');
+      updateUser({
+        avatarUrl: data.data.avatar_url,
+        bio: data.data.bio,
+        schoolOrOrg: data.data.school_or_org,
+      });
+    } catch {
+      // Keep the stored login profile available if the API is temporarily unavailable.
+    }
+  }
 
   async function login(email, password) {
     const { data } = await authApi.login(email, password);
@@ -19,6 +38,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('refreshToken', data.refreshToken);
     localStorage.setItem('user', JSON.stringify(data.user));
     setUser(data.user);
+    await refreshProfile();
   }
 
   async function register(payload) {
@@ -27,6 +47,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('refreshToken', data.refreshToken);
     localStorage.setItem('user', JSON.stringify(data.user));
     setUser(data.user);
+    await refreshProfile();
   }
 
   function logout() {
@@ -34,8 +55,19 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
+  function updateUser(updates) {
+    setUser((currentUser) => {
+      const updatedUser = { ...currentUser, ...updates };
+      if (Object.keys(updates).every((key) => currentUser?.[key] === updates[key])) {
+        return currentUser;
+      }
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      return updatedUser;
+    });
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import AuthShell, { PillInput, authButtonClass, authErrorClass, authLinkClass } from '../components/auth/AuthShell';
 
 const steps = [
   { title: 'Create your profile', desc: 'Choose your role and set up your skills' },
@@ -42,112 +43,117 @@ export default function Signup() {
   }
 
   return (
-    <div className="min-h-screen flex">
-      <div className="hidden lg:flex lg:w-1/2 bg-brand-600 text-white flex-col justify-between p-12 relative overflow-hidden">
-        <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-white/10" />
-        <div className="absolute bottom-0 right-0 w-96 h-96 rounded-full bg-white/10 translate-x-1/3 translate-y-1/3" />
+    <AuthShell
+      title="Create your account"
+      subtitle="Join iElevate and start your skill journey"
+      aside={(
+        <>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-accent-500 mb-4">How it works</p>
+            <ol className="space-y-4">
+              {steps.map((s, i) => (
+                <li key={s.title} className="flex gap-3">
+                  <span className="w-7 h-7 rounded-full bg-white text-brand-600 flex items-center justify-center text-xs font-bold shrink-0">
+                    {i + 1}
+                  </span>
+                  <div>
+                    <p className="font-medium text-sm">{s.title}</p>
+                    <p className="text-brand-200 text-xs">{s.desc}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
 
-        <span className="font-bold text-lg relative">iElevate</span>
-
-        <div className="relative">
-          <p className="text-xs uppercase tracking-wide text-brand-200 mb-4">How it works</p>
-          <ol className="space-y-4">
-            {steps.map((s, i) => (
-              <li key={s.title} className="flex gap-3">
-                <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-xs font-semibold shrink-0">
-                  {i + 1}
-                </span>
-                <div>
-                  <p className="font-medium text-sm">{s.title}</p>
-                  <p className="text-brand-200 text-xs">{s.desc}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
+          <div />
+        </>
+      )}
+      footer={(
+        <>
+          Already have an account?{' '}
+          <Link to="/login" className={authLinkClass}>Sign in</Link>
+        </>
+      )}
+    >
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <p className="mb-2 text-sm font-medium text-white">I want to join as a</p>
+          <div className="grid grid-cols-2 gap-3">
+            {ROLES.map((r) => {
+              const selected = form.userType === r.value;
+              return (
+                <button
+                  key={r.value}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => setForm({ ...form, userType: r.value })}
+                  // Selected: iELEVATE's "Navy 50" tint with navy border and text (orange stays for the main button).
+                  className={`relative rounded-md border-2 px-3 py-2 text-left transition ${
+                    selected ? 'border-brand-600 bg-brand-50 text-brand-600' : 'border-white/30 bg-white/10 text-white hover:bg-white/20'
+                  }`}
+                >
+                  {selected && (
+                    <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-brand-600 text-white" aria-hidden="true">
+                      <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m2.5 6.2 2.2 2.2 4.8-4.8" /></svg>
+                    </span>
+                  )}
+                  <p className="pr-4 text-sm font-semibold">{r.label}</p>
+                  <p className={`text-xs ${selected ? 'text-brand-500' : 'text-white/80'}`}>{r.desc}</p>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        <div />
-      </div>
+        <PillInput
+          id="signup-name"
+          icon="person"
+          label="Full name"
+          type="text"
+          placeholder="Full name"
+          value={form.fullName}
+          onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+          required
+        />
+        <PillInput
+          id="signup-school"
+          icon="school"
+          label="School / Organization (optional)"
+          type="text"
+          placeholder="School / Organization (optional)"
+          value={form.schoolOrOrg}
+          onChange={(e) => setForm({ ...form, schoolOrOrg: e.target.value })}
+        />
+        <PillInput
+          id="signup-email"
+          icon="email"
+          label="Email address"
+          type="email"
+          placeholder="Email address"
+          value={form.email}
+          onChange={(e) => setForm({ ...form, email: e.target.value })}
+          required
+        />
+        <PillInput
+          id="signup-password"
+          icon="password"
+          label="Password (min 8 characters)"
+          type="password"
+          placeholder="Password (min 8 characters)"
+          value={form.password}
+          onChange={(e) => setForm({ ...form, password: e.target.value })}
+          required
+          minLength={8}
+        />
 
-      <div className="flex-1 flex items-center justify-center px-6 py-12 bg-white overflow-y-auto">
-        <div className="w-full max-w-sm">
-          <h2 className="text-2xl font-bold mb-1">Create your account</h2>
-          <p className="text-slate-500 text-sm mb-6">Join iElevate and start your skill journey</p>
+        {error && <p role="alert" className={authErrorClass}>{error}</p>}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="text-sm font-medium block mb-1.5">I want to join as a</label>
-              <div className="grid grid-cols-2 gap-3">
-                {ROLES.map((r) => (
-                  <button
-                    key={r.value}
-                    type="button"
-                    onClick={() => setForm({ ...form, userType: r.value })}
-                    className={`text-left rounded-lg border p-3 transition ${
-                      form.userType === r.value
-                        ? 'border-brand-500 bg-brand-50'
-                        : 'border-stone-300 hover:border-stone-400'
-                    }`}
-                  >
-                    <p className="text-sm font-medium">{r.label}</p>
-                    <p className="text-xs text-slate-500">{r.desc}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <input
-              type="text"
-              placeholder="Full name"
-              className="w-full rounded-lg border border-stone-300 px-4 py-2.5 outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-              value={form.fullName}
-              onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-              required
-            />
-            <input
-              type="text"
-              placeholder="School / Organization (optional)"
-              className="w-full rounded-lg border border-stone-300 px-4 py-2.5 outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-              value={form.schoolOrOrg}
-              onChange={(e) => setForm({ ...form, schoolOrOrg: e.target.value })}
-            />
-            <input
-              type="email"
-              placeholder="Email address"
-              className="w-full rounded-lg border border-stone-300 px-4 py-2.5 outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              required
-            />
-            <input
-              type="password"
-              placeholder="Password (min 8 characters)"
-              className="w-full rounded-lg border border-stone-300 px-4 py-2.5 outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
-              minLength={8}
-            />
-
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full rounded-full bg-brand-600 hover:bg-brand-700 transition py-2.5 font-medium text-white disabled:opacity-50"
-            >
-              {submitting ? 'Creating account…' : 'Create my account'}
-            </button>
-          </form>
-
-          <p className="text-sm text-slate-500 mt-6 text-center">
-            Already have an account?{' '}
-            <Link to="/login" className="text-brand-600 font-medium hover:underline">
-              Sign in
-            </Link>
-          </p>
+        <div className="pt-1">
+          <button type="submit" disabled={submitting} className={authButtonClass}>
+            {submitting ? 'Creating account…' : 'Create my account'}
+          </button>
         </div>
-      </div>
-    </div>
+      </form>
+    </AuthShell>
   );
 }

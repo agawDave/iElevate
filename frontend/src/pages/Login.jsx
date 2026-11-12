@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import AuthShell, { PillInput, authButtonClass, authErrorClass, authLinkClass } from '../components/auth/AuthShell';
 
 export default function Login() {
   const { login } = useAuth();
@@ -8,118 +9,138 @@ export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [accountNotice, setAccountNotice] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setAccountNotice(null);
     setSubmitting(true);
     try {
       await login(form.email, form.password);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed');
+      const response = err.response?.data;
+      if (response?.accountStatus === 'suspended' || response?.accountStatus === 'banned') {
+        setAccountNotice(response);
+      } else {
+        setError(response?.message || 'Login failed');
+      }
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex">
-      <div className="hidden lg:flex lg:w-1/2 bg-brand-600 text-white flex-col justify-between p-12 relative overflow-hidden">
-        <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-white/10" />
-        <div className="absolute bottom-0 right-0 w-96 h-96 rounded-full bg-white/10 translate-x-1/3 translate-y-1/3" />
-
-        <span className="font-bold text-lg relative">iElevate</span>
-
-        <div className="relative">
-          <h1 className="text-4xl font-bold leading-tight mb-1">Learn by doing.</h1>
-          <h1 className="text-4xl font-bold leading-tight text-brand-200 mb-4">Grow by sharing.</h1>
-          <p className="text-brand-100 max-w-sm mb-6">
-            Connect with specialists, exchange skills, and earn blockchain credentials.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {['Bidirectional matching', 'Blockchain creds', 'Real-time chat', 'Portfolio builder'].map((t) => (
-              <span key={t} className="text-xs bg-white/15 rounded-full px-3 py-1.5">
-                {t}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex gap-8 relative text-sm">
-          <div>
-            <p className="text-2xl font-bold">2,400+</p>
-            <p className="text-brand-200">Active students</p>
-          </div>
-          <div>
-            <p className="text-2xl font-bold">180+</p>
-            <p className="text-brand-200">Skill categories</p>
-          </div>
-          <div>
-            <p className="text-2xl font-bold">98%</p>
-            <p className="text-brand-200">Satisfaction</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 flex items-center justify-center px-6 py-12 bg-white">
-        <div className="w-full max-w-sm">
-          <h2 className="text-2xl font-bold mb-1">Welcome back</h2>
-          <p className="text-slate-500 text-sm mb-8">Sign in to your iElevate account</p>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
+    <>
+      <AuthShell
+        title="Welcome back"
+        subtitle="Sign in to your iElevate account"
+        aside={(
+          <>
             <div>
-              <label className="text-sm font-medium block mb-1.5">Email address</label>
-              <input
-                type="email"
-                placeholder="you@example.com"
-                className="w-full rounded-lg border border-stone-300 px-4 py-2.5 outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                required
-              />
-            </div>
-            <div>
-              <div className="flex justify-between items-baseline mb-1.5">
-                <label className="text-sm font-medium">Password</label>
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="text-xs text-brand-600 hover:underline"
-                >
-                  {showPassword ? 'Hide' : 'Show'}
-                </button>
+              <h2 className="text-4xl font-extrabold leading-tight mb-1 tracking-tight text-white">Learn by doing.</h2>
+              <h2 className="text-4xl font-extrabold leading-tight text-accent-500 mb-4 tracking-tight">Grow by sharing.</h2>
+              <p className="text-brand-100 max-w-sm mb-6">
+                Connect with specialists, exchange skills, and earn blockchain credentials.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {['Bidirectional matching', 'Blockchain creds', 'Real-time chat', 'Portfolio builder'].map((t) => (
+                  <span key={t} className="text-xs bg-white/15 rounded-full px-3 py-1.5">
+                    {t}
+                  </span>
+                ))}
               </div>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••"
-                className="w-full rounded-lg border border-stone-300 px-4 py-2.5 outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                required
-              />
             </div>
 
-            {error && <p className="text-red-500 text-sm">{error}</p>}
+            <div className="flex gap-8 text-sm">
+              <div>
+                <p className="text-2xl font-bold">2,400+</p>
+                <p className="text-brand-200">Active students</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold">180+</p>
+                <p className="text-brand-200">Skill categories</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold">98%</p>
+                <p className="text-brand-200">Satisfaction</p>
+              </div>
+            </div>
+          </>
+        )}
+        footer={(
+          <>
+            Don't have an account?{' '}
+            <Link to="/signup" className={authLinkClass}>Create your free account</Link>
+          </>
+        )}
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <PillInput
+            id="login-email"
+            icon="email"
+            label="Email address"
+            type="email"
+            placeholder="you@example.com"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            required
+          />
+          <PillInput
+            id="login-password"
+            icon="password"
+            label="Password"
+            type={showPassword ? 'text' : 'password'}
+            placeholder="••••••••"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            required
+            trailing={(
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="shrink-0 px-4 text-xs font-semibold text-brand-700 hover:underline"
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            )}
+          />
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full rounded-full bg-brand-600 hover:bg-brand-700 transition py-2.5 font-medium text-white disabled:opacity-50"
-            >
+          {error && <p role="alert" className={authErrorClass}>{error}</p>}
+
+          <div className="pt-1">
+            <button type="submit" disabled={submitting} className={authButtonClass}>
               {submitting ? 'Signing in…' : 'Sign in'}
             </button>
-          </form>
+          </div>
+        </form>
+      </AuthShell>
 
-          <p className="text-sm text-slate-500 mt-8 text-center">
-            Don't have an account?{' '}
-            <Link to="/signup" className="text-brand-600 font-medium hover:underline">
-              Create your free account
-            </Link>
-          </p>
+      {accountNotice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4" role="dialog" aria-modal="true" aria-labelledby="account-notice-title">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-red-600">Account access</p>
+                <h2 id="account-notice-title" className="text-xl font-semibold mt-1">Account {accountNotice.accountStatus}</h2>
+              </div>
+              <button type="button" onClick={() => setAccountNotice(null)} aria-label="Close" className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
+            </div>
+            <p className="text-sm text-slate-600 mt-4">Your account cannot sign in because it has been {accountNotice.accountStatus}. Contact the administrator to ask about the decision and next steps.</p>
+            {accountNotice.adminContact ? (
+              <div className="mt-4 rounded-lg bg-stone-50 p-4">
+                <p className="text-sm font-medium">Administrator: {accountNotice.adminContact.full_name}</p>
+                <a href={`mailto:${accountNotice.adminContact.email}`} className="text-sm text-brand-600 hover:underline">{accountNotice.adminContact.email}</a>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 mt-4">No administrator contact is currently available.</p>
+            )}
+            <button type="button" onClick={() => setAccountNotice(null)} className="mt-5 w-full rounded-lg bg-accent-500 hover:bg-accent-550 py-2.5 text-sm font-semibold text-brand-900">Close</button>
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    </>
   );
 }

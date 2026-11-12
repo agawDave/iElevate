@@ -1,27 +1,5 @@
 const { pool } = require('../config/db');
-
-async function listUsers(req, res) {
-  const { status, q, page = 1, pageSize = 20 } = req.query;
-  const offset = (Number(page) - 1) * Number(pageSize);
-  const params = [];
-  let where = 'WHERE 1=1';
-
-  if (status) {
-    where += ' AND status = ?';
-    params.push(status);
-  }
-  if (q) {
-    where += ' AND (full_name LIKE ? OR email LIKE ?)';
-    params.push(`%${q}%`, `%${q}%`);
-  }
-
-  const [rows] = await pool.query(
-    `SELECT id, full_name, email, role, status, created_at, last_login_at
-     FROM users ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-    [...params, Number(pageSize), offset]
-  );
-  res.json({ success: true, data: rows });
-}
+const { programAnalytics } = require('../lib/elevateAnalytics');
 
 async function updateUserStatus(req, res) {
   const { userId } = req.params;
@@ -30,7 +8,12 @@ async function updateUserStatus(req, res) {
   if (!allowed.includes(status)) {
     return res.status(400).json({ success: false, message: 'Invalid status' });
   }
-  await pool.query('UPDATE users SET status = ? WHERE id = ?', [status, userId]);
+  // Locking yourself out would leave nobody to undo it.
+  if (String(userId) === String(req.user.id)) {
+    return res.status(400).json({ success: false, message: 'You cannot change the status of your own account.' });
+  }
+  const [result] = await pool.query('UPDATE users SET status = ? WHERE id = ?', [status, userId]);
+  if (!result.affectedRows) return res.status(404).json({ success: false, message: 'User not found' });
   res.json({ success: true, message: `User status updated to ${status}` });
 }
 
@@ -84,4 +67,31 @@ async function systemStats(req, res) {
   });
 }
 
-module.exports = { listUsers, updateUserStatus, listDisputes, resolveDispute, systemStats };
+async function listPendingModules(req, res) {
+  const [rows] = await pool.query(
+    `SELECT lm.id, lm.title, lm.description, lm.phase, lm.hours, lm.created_at,
+            u.full_name AS specialist_name
+     FROM learning_modules lm JOIN users u ON u.id = lm.owner_id
+     WHERE lm.approval_status = 'pending' ORDER BY lm.created_at ASC`
+  );
+  res.json({ success: true, data: rows });
+}
+
+async function reviewModule(req, res) {
+  const { status } = req.body;
+  if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ success: false, message: 'Invalid review status' });
+  const [result] = await pool.query(
+    'UPDATE learning_modules SET approval_status = ?, reviewed_by = ?, reviewed_at = NOW() WHERE id = ? AND approval_status = \'pending\'',
+    [status, req.user.id, req.params.moduleId]
+  );
+  if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Pending module not found' });
+  res.json({ success: true, message: `Module ${status}` });
+}
+
+// Program analytics: new (incoming), ongoing and completed learners per topic,
+// and each specialist's counts and weekly trend.
+async function analytics(req, res) {
+  res.json({ success: true, data: await programAnalytics() });
+}
+
+module.exports = { analytics, updateUserStatus, listDisputes, resolveDispute, systemStats, listPendingModules, reviewModule };

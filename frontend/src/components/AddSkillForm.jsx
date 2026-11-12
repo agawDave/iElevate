@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import axiosClient from '../api/axiosClient';
 
-export default function AddSkillForm({ onAdded }) {
+export default function AddSkillForm({ onAdded, allowTeaching = true, allowLearning = true, moduleMode = false }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
+  const [modules, setModules] = useState([]);
+  const [moduleSearchLoading, setModuleSearchLoading] = useState(false);
+  const [moduleSearchError, setModuleSearchError] = useState('');
   const [selectedSkill, setSelectedSkill] = useState(null);
   const [relationType, setRelationType] = useState('teaches');
   const [proficiency, setProficiency] = useState('beginner');
@@ -13,15 +16,52 @@ export default function AddSkillForm({ onAdded }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!query || selectedSkill) {
+    if (!allowTeaching && allowLearning) setRelationType('wants_to_learn');
+  }, [allowTeaching, allowLearning]);
+
+  useEffect(() => {
+    if (moduleMode || !query || selectedSkill) {
       setResults([]);
       return;
     }
     const handle = setTimeout(() => {
-      axiosClient.get('/skills/search', { params: { q: query } }).then((r) => setResults(r.data.data));
+      axiosClient.get('/skills/search', { params: { q: query } })
+        .then((response) => setResults(response.data.data))
+        .catch((err) => setError(err.response?.data?.message || 'Unable to search skills. Try again.'));
     }, 250);
     return () => clearTimeout(handle);
-  }, [query, selectedSkill]);
+  }, [query, selectedSkill, moduleMode]);
+
+  useEffect(() => {
+    const search = query.trim();
+    if (!moduleMode || search.length < 2 || selectedSkill) {
+      setModules([]);
+      setModuleSearchLoading(false);
+      setModuleSearchError('');
+      return undefined;
+    }
+
+    let active = true;
+    setModuleSearchLoading(true);
+    setModuleSearchError('');
+    const handle = setTimeout(() => {
+      axiosClient.get('/modules', { params: { q: search, limit: 8, sort: 'relevance' } })
+        .then((response) => {
+          if (active) setModules(Array.isArray(response.data?.data) ? response.data.data : []);
+        })
+        .catch((err) => {
+          if (active) setModuleSearchError(err.response?.data?.message || 'Unable to search modules. Try again.');
+        })
+        .finally(() => {
+          if (active) setModuleSearchLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      active = false;
+      clearTimeout(handle);
+    };
+  }, [query, selectedSkill, moduleMode]);
 
   function pickSkill(skill) {
     setSelectedSkill(skill);
@@ -38,18 +78,14 @@ export default function AddSkillForm({ onAdded }) {
     e.preventDefault();
     setError('');
     if (!selectedSkill) {
-      setError('Pick a skill from the list first');
+      setError(moduleMode ? 'Choose a module first' : 'Pick a skill from the list first');
       return;
     }
     setSubmitting(true);
     try {
-      await axiosClient.post('/skills/me', {
-        skillId: selectedSkill.id,
-        relationType,
-        proficiency: relationType === 'teaches' ? proficiency : null,
-        yearsExperience: relationType === 'teaches' && yearsExperience ? yearsExperience : null,
-        description: description || null,
-      });
+      await axiosClient.post(moduleMode ? '/modules/preferences/me' : '/skills/me', moduleMode
+        ? { moduleId: selectedSkill.id }
+        : { skillId: selectedSkill.id, relationType, proficiency: relationType === 'teaches' ? proficiency : null, yearsExperience: relationType === 'teaches' && yearsExperience ? yearsExperience : null, description: description || null });
       clearSelection();
       setYearsExperience('');
       setDescription('');
@@ -66,15 +102,54 @@ export default function AddSkillForm({ onAdded }) {
       <div className="relative">
         <input
           type="text"
-          placeholder="Search for a skill…"
+          placeholder={moduleMode ? 'Search modules by title, description, or skill…' : 'Search for a skill…'}
+          autoComplete="off"
           className="w-full rounded-lg border border-stone-300 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
             setSelectedSkill(null);
+            setError('');
           }}
         />
-        {results.length > 0 && (
+        {moduleMode && query.trim().length > 0 && !selectedSkill && (
+          <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-stone-200 bg-white shadow-lg">
+            {query.trim().length < 2 ? (
+              <p className="px-4 py-3 text-sm text-slate-500">Enter at least 2 characters to search modules.</p>
+            ) : moduleSearchLoading ? (
+              <p className="px-4 py-3 text-sm text-slate-500">Searching modules…</p>
+            ) : moduleSearchError ? (
+              <p role="alert" className="px-4 py-3 text-sm text-red-600">{moduleSearchError}</p>
+            ) : modules.length ? (
+              <>
+                <ul className="max-h-64 overflow-auto">
+                  {modules.map((module) => (
+                    <li key={module.id}>
+                      <button
+                        type="button"
+                        className="w-full border-b border-stone-100 px-4 py-3 text-left hover:bg-stone-50"
+                        onClick={() => {
+                          setSelectedSkill(module);
+                          setQuery(module.title);
+                          setModules([]);
+                        }}
+                      >
+                        <span className="block text-sm font-medium text-slate-800">{module.title}</span>
+                        <span className="block text-xs text-slate-500">{module.phase}{module.specialistName ? ` · ${module.specialistName}` : ''}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <p className="border-t border-stone-100 px-4 py-2 text-xs text-slate-500">
+                  Showing up to 8 matches. Refine your search to narrow the results.
+                </p>
+              </>
+            ) : (
+              <p className="px-4 py-3 text-sm text-slate-500">No approved modules found. Try another title or skill.</p>
+            )}
+          </div>
+        )}
+        {!moduleMode && results.length > 0 && (
           <ul className="absolute z-10 mt-1 w-full bg-white border border-stone-200 rounded-lg max-h-48 overflow-auto shadow-lg">
             {results.map((s) => (
               <li key={s.id}>
@@ -92,14 +167,18 @@ export default function AddSkillForm({ onAdded }) {
       </div>
 
       <div className="flex gap-3">
-        <select
-          className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-          value={relationType}
-          onChange={(e) => setRelationType(e.target.value)}
-        >
-          <option value="teaches">I can teach this</option>
-          <option value="wants_to_learn">I want to learn this</option>
-        </select>
+        {allowTeaching ? (
+          <select
+            className="rounded-lg border border-stone-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+            value={relationType}
+            onChange={(e) => setRelationType(e.target.value)}
+          >
+            <option value="teaches">I can teach this</option>
+            {allowLearning && <option value="wants_to_learn">I want to learn this</option>}
+          </select>
+        ) : (
+          <span className="rounded-lg bg-brand-50 text-brand-700 px-3 py-2 text-sm">I want to learn this</span>
+        )}
 
         {relationType === 'teaches' && (
           <>
@@ -139,9 +218,9 @@ export default function AddSkillForm({ onAdded }) {
       <button
         type="submit"
         disabled={submitting}
-        className="rounded-full bg-brand-600 hover:bg-brand-700 transition px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        className="rounded-lg bg-accent-500 hover:bg-accent-550 transition px-4 py-2 text-sm font-semibold text-brand-900 disabled:opacity-50"
       >
-        {submitting ? 'Adding…' : 'Add skill'}
+        {submitting ? 'Adding…' : moduleMode ? 'Add module' : 'Add skill'}
       </button>
     </form>
   );
