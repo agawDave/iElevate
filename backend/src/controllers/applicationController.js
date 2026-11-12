@@ -41,10 +41,32 @@ async function withTransaction(work) {
   }
 }
 
+// Brings the learner's matches up to date (e.g. a specialist's module was just
+// approved). A lock conflict with a parallel update of the same learner is retried.
+async function bringMatchesUpToDate(learnerId) {
+  for (let attempt = 1; ; attempt += 1) {
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await recomputeElevateAssignments(learnerId, connection);
+      await connection.commit();
+      return;
+    } catch (error) {
+      await connection.rollback();
+      const lockConflict = error.code === 'ER_LOCK_DEADLOCK' || error.code === 'ER_LOCK_WAIT_TIMEOUT';
+      if (!lockConflict || attempt >= 3) throw error;
+    } finally {
+      connection.release();
+    }
+  }
+}
+
 // The specialists the learner can apply to, per topic, best fit first.
-// Read-only: the Modules page loads this together with /modules, which
-// already brings the learner's matches up to date.
+// The Modules page loads this at the same time as /modules, so it brings the
+// matches up to date itself rather than relying on /modules finishing first
+// (otherwise a just-approved module could be missing from the choices).
 async function listOptions(req, res) {
+  await bringMatchesUpToDate(req.user.id);
   const options = await specialistOptions(req.user.id);
   const ids = [...new Set([...options.values()].flat().map((option) => option.specialistId))];
   const [people] = ids.length
