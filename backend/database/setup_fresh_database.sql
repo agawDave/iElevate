@@ -79,68 +79,14 @@ CREATE TABLE `conversations` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_a_id` bigint(20) unsigned NOT NULL,
   `user_b_id` bigint(20) unsigned NOT NULL,
-  `exchange_id` bigint(20) unsigned DEFAULT NULL,
   `module_id` int(10) unsigned DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_conversation_module_pair` (`module_id`,`user_a_id`,`user_b_id`),
   KEY `fk_conv_user_b` (`user_b_id`),
-  KEY `fk_conv_exchange` (`exchange_id`),
   KEY `idx_conversation_user_a` (`user_a_id`),
-  CONSTRAINT `fk_conv_exchange` FOREIGN KEY (`exchange_id`) REFERENCES `skill_exchanges` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_conv_user_a` FOREIGN KEY (`user_a_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_conv_user_b` FOREIGN KEY (`user_b_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `credentials` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `exchange_id` bigint(20) unsigned NOT NULL,
-  `recipient_id` bigint(20) unsigned NOT NULL,
-  `skill_id` int(10) unsigned NOT NULL,
-  `issuer_id` bigint(20) unsigned NOT NULL,
-  `token_id` varchar(100) DEFAULT NULL,
-  `contract_address` varchar(42) DEFAULT NULL,
-  `chain` enum('polygon','ethereum','mumbai_testnet','amoy_testnet') NOT NULL DEFAULT 'polygon',
-  `tx_hash` varchar(66) DEFAULT NULL,
-  `metadata_uri` varchar(255) DEFAULT NULL,
-  `status` enum('pending','minted','failed','revoked') NOT NULL DEFAULT 'pending',
-  `issued_at` datetime DEFAULT NULL,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `fk_credential_exchange` (`exchange_id`),
-  KEY `fk_credential_skill` (`skill_id`),
-  KEY `fk_credential_issuer` (`issuer_id`),
-  KEY `idx_credential_recipient` (`recipient_id`),
-  KEY `idx_credential_status` (`status`),
-  CONSTRAINT `fk_credential_exchange` FOREIGN KEY (`exchange_id`) REFERENCES `skill_exchanges` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_credential_issuer` FOREIGN KEY (`issuer_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_credential_recipient` FOREIGN KEY (`recipient_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_credential_skill` FOREIGN KEY (`skill_id`) REFERENCES `skills` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `disputes` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `exchange_id` bigint(20) unsigned NOT NULL,
-  `raised_by` bigint(20) unsigned NOT NULL,
-  `reason` varchar(500) NOT NULL,
-  `details` text DEFAULT NULL,
-  `status` enum('open','under_review','resolved','dismissed') NOT NULL DEFAULT 'open',
-  `resolved_by` bigint(20) unsigned DEFAULT NULL,
-  `resolution_notes` text DEFAULT NULL,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  `resolved_at` datetime DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `fk_dispute_exchange` (`exchange_id`),
-  KEY `fk_dispute_raiser` (`raised_by`),
-  KEY `fk_dispute_resolver` (`resolved_by`),
-  KEY `idx_dispute_status` (`status`),
-  CONSTRAINT `fk_dispute_exchange` FOREIGN KEY (`exchange_id`) REFERENCES `skill_exchanges` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_dispute_raiser` FOREIGN KEY (`raised_by`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_dispute_resolver` FOREIGN KEY (`resolved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -247,30 +193,6 @@ CREATE TABLE `learning_modules` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `matches` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `user_a_id` bigint(20) unsigned NOT NULL,
-  `user_b_id` bigint(20) unsigned NOT NULL,
-  `skill_a_teaches` int(10) unsigned NOT NULL,
-  `skill_b_teaches` int(10) unsigned NOT NULL,
-  `match_score` decimal(5,2) NOT NULL DEFAULT 0.00,
-  `status` enum('suggested','accepted','declined','expired') NOT NULL DEFAULT 'suggested',
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_match_pair` (`user_a_id`,`user_b_id`,`skill_a_teaches`,`skill_b_teaches`),
-  KEY `fk_match_user_b` (`user_b_id`),
-  KEY `fk_match_skill_a` (`skill_a_teaches`),
-  KEY `fk_match_skill_b` (`skill_b_teaches`),
-  KEY `idx_match_status` (`status`),
-  CONSTRAINT `fk_match_skill_a` FOREIGN KEY (`skill_a_teaches`) REFERENCES `skills` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_match_skill_b` FOREIGN KEY (`skill_b_teaches`) REFERENCES `skills` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_match_user_a` FOREIGN KEY (`user_a_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_match_user_b` FOREIGN KEY (`user_b_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `messages` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `conversation_id` bigint(20) unsigned NOT NULL,
@@ -364,31 +286,6 @@ CREATE TABLE `module_certificates` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `module_code_exercises` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `question_id` int(10) unsigned NOT NULL,
-  `function_name` varchar(100) NOT NULL,
-  `starter_code` mediumtext NOT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `question_id` (`question_id`),
-  CONSTRAINT `fk_code_exercise_question` FOREIGN KEY (`question_id`) REFERENCES `module_questions` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `module_code_tests` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `exercise_id` int(10) unsigned NOT NULL,
-  `assertion_expr` varchar(500) NOT NULL,
-  `is_hidden` tinyint(1) NOT NULL DEFAULT 0,
-  `sort_order` int(10) unsigned NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`),
-  KEY `fk_code_test_exercise` (`exercise_id`),
-  CONSTRAINT `fk_code_test_exercise` FOREIGN KEY (`exercise_id`) REFERENCES `module_code_exercises` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `module_connections` (
   `beneficiary_id` bigint(20) unsigned NOT NULL,
   `module_id` int(10) unsigned NOT NULL,
@@ -397,23 +294,6 @@ CREATE TABLE `module_connections` (
   KEY `fk_module_connection_module` (`module_id`),
   CONSTRAINT `fk_module_connection_beneficiary` FOREIGN KEY (`beneficiary_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_module_connection_module` FOREIGN KEY (`module_id`) REFERENCES `learning_modules` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `module_questions` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `module_id` int(10) unsigned NOT NULL,
-  `question_text` varchar(500) NOT NULL,
-  `question_type` enum('mcq','code') NOT NULL DEFAULT 'mcq',
-  `option_a` varchar(190) DEFAULT NULL,
-  `option_b` varchar(190) DEFAULT NULL,
-  `option_c` varchar(190) DEFAULT NULL,
-  `correct_option` enum('a','b','c') DEFAULT NULL,
-  `sort_order` int(10) unsigned NOT NULL DEFAULT 0,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_module_question_order` (`module_id`,`sort_order`),
-  CONSTRAINT `fk_module_question_module` FOREIGN KEY (`module_id`) REFERENCES `learning_modules` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -519,33 +399,6 @@ CREATE TABLE `module_test_questions` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `module_topics` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `module_id` int(10) unsigned NOT NULL,
-  `topic_name` varchar(100) NOT NULL,
-  `sort_order` int(10) unsigned NOT NULL DEFAULT 0,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_module_topic_order` (`module_id`,`sort_order`,`id`),
-  CONSTRAINT `fk_module_topic_module` FOREIGN KEY (`module_id`) REFERENCES `learning_modules` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `notifications` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `user_id` bigint(20) unsigned NOT NULL,
-  `type` varchar(60) NOT NULL,
-  `payload` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`payload`)),
-  `read_at` datetime DEFAULT NULL,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_notification_user_unread` (`user_id`,`read_at`),
-  CONSTRAINT `fk_notification_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `portfolio_items` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned NOT NULL,
@@ -567,40 +420,6 @@ CREATE TABLE `portfolio_items` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `refresh_tokens` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `user_id` bigint(20) unsigned NOT NULL,
-  `token_hash` varchar(255) NOT NULL,
-  `expires_at` datetime NOT NULL,
-  `revoked_at` datetime DEFAULT NULL,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_refresh_user` (`user_id`),
-  CONSTRAINT `fk_refresh_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `sessions` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `exchange_id` bigint(20) unsigned NOT NULL,
-  `scheduled_by` bigint(20) unsigned NOT NULL,
-  `title` varchar(190) DEFAULT NULL,
-  `starts_at` datetime NOT NULL,
-  `ends_at` datetime NOT NULL,
-  `meeting_link` varchar(255) DEFAULT NULL,
-  `status` enum('pending','confirmed','completed','cancelled','no_show') NOT NULL DEFAULT 'pending',
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `fk_session_scheduler` (`scheduled_by`),
-  KEY `idx_session_exchange` (`exchange_id`),
-  KEY `idx_session_time` (`starts_at`),
-  CONSTRAINT `fk_session_exchange` FOREIGN KEY (`exchange_id`) REFERENCES `skill_exchanges` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_session_scheduler` FOREIGN KEY (`scheduled_by`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `skill_categories` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `parent_id` int(10) unsigned DEFAULT NULL,
@@ -611,38 +430,6 @@ CREATE TABLE `skill_categories` (
   UNIQUE KEY `slug` (`slug`),
   KEY `idx_category_parent` (`parent_id`),
   CONSTRAINT `fk_category_parent` FOREIGN KEY (`parent_id`) REFERENCES `skill_categories` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `skill_exchanges` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `match_id` bigint(20) unsigned NOT NULL,
-  `user_a_id` bigint(20) unsigned NOT NULL,
-  `user_b_id` bigint(20) unsigned NOT NULL,
-  `skill_a_id` int(10) unsigned NOT NULL,
-  `skill_b_id` int(10) unsigned NOT NULL,
-  `status` enum('proposed','scheduled','in_progress','completed','cancelled','disputed') NOT NULL DEFAULT 'proposed',
-  `started_at` datetime DEFAULT NULL,
-  `completed_at` datetime DEFAULT NULL,
-  `user_a_rating` tinyint(3) unsigned DEFAULT NULL,
-  `user_b_rating` tinyint(3) unsigned DEFAULT NULL,
-  `user_a_feedback` varchar(1000) DEFAULT NULL,
-  `user_b_feedback` varchar(1000) DEFAULT NULL,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `fk_exchange_match` (`match_id`),
-  KEY `fk_exchange_user_b` (`user_b_id`),
-  KEY `fk_exchange_skill_a` (`skill_a_id`),
-  KEY `fk_exchange_skill_b` (`skill_b_id`),
-  KEY `idx_exchange_status` (`status`),
-  KEY `idx_exchange_users` (`user_a_id`,`user_b_id`),
-  CONSTRAINT `fk_exchange_match` FOREIGN KEY (`match_id`) REFERENCES `matches` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_exchange_skill_a` FOREIGN KEY (`skill_a_id`) REFERENCES `skills` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_exchange_skill_b` FOREIGN KEY (`skill_b_id`) REFERENCES `skills` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_exchange_user_a` FOREIGN KEY (`user_a_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_exchange_user_b` FOREIGN KEY (`user_b_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -723,31 +510,6 @@ CREATE TABLE `user_learning_circumstances` (
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`user_id`),
   CONSTRAINT `fk_learning_circumstances_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `user_module_preferences` (
-  `user_id` bigint(20) unsigned NOT NULL,
-  `module_id` int(10) unsigned NOT NULL,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`user_id`,`module_id`),
-  KEY `fk_module_preference_module` (`module_id`),
-  CONSTRAINT `fk_module_preference_module` FOREIGN KEY (`module_id`) REFERENCES `learning_modules` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_module_preference_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `user_module_questions` (
-  `user_id` bigint(20) unsigned NOT NULL,
-  `question_id` int(10) unsigned NOT NULL,
-  `completed_at` datetime NOT NULL DEFAULT current_timestamp(),
-  `code_submission` mediumtext DEFAULT NULL,
-  PRIMARY KEY (`user_id`,`question_id`),
-  KEY `fk_user_module_question_question` (`question_id`),
-  CONSTRAINT `fk_user_module_question_question` FOREIGN KEY (`question_id`) REFERENCES `module_questions` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_user_module_question_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;

@@ -27,8 +27,10 @@ $structure = (& $dump @common --no-data --skip-add-drop-table $db) -join "`n"
 if ($LASTEXITCODE) { throw 'Could not read the database structure. Is MySQL running?' }
 $structure = $structure -replace ' AUTO_INCREMENT=\d+', ''
 # Reference data only. Official materials are the ones no person uploaded.
-$reference = (& $dump @common --no-create-info --complete-insert $db skill_categories skills learning_modules module_skills module_topics) -join "`n"
+$reference = (& $dump @common --no-create-info --complete-insert $db skill_categories skills learning_modules module_skills) -join "`n"
+if ($LASTEXITCODE) { throw "Could not export the ELEVATE topics and skills." }
 $materials = (& $dump @common --no-create-info --complete-insert '--where=uploaded_by IS NULL' $db module_resources) -join "`n"
+if ($LASTEXITCODE) { throw "Could not export the official materials." }
 
 $header = @"
 -- iELEVATE: a fresh, empty database (structure + ELEVATE reference data)

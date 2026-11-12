@@ -260,8 +260,6 @@ async function listModules(req, res) {
     directScore: Number(row.direct_score),
     relatedScore: Number(row.related_score),
     skills: [],
-    topics: [],
-    questions: [],
     resources: [],
   }));
   const moduleIds = modules.map((module) => module.id);
@@ -298,17 +296,6 @@ async function listModules(req, res) {
       });
     }
   });
-  const [topicRows] = await pool.query(
-    `SELECT module_id, topic_name
-     FROM module_topics
-     WHERE module_id IN (?)
-     ORDER BY module_id, sort_order, id`,
-    [moduleIds]
-  );
-  topicRows.forEach((topic) => {
-    moduleById.get(topic.module_id)?.topics.push(topic.topic_name);
-  });
-
   // Specialists' own modules for these topics.
   //   specialist:  myModule = their module for the topic (null = not created yet)
   //   beneficiary: specialistModule = the module of the specialist they applied
@@ -364,59 +351,6 @@ async function listModules(req, res) {
     }
   });
 
-  const [questionRows] = await pool.query(
-    `SELECT mq.id AS question_id, mq.module_id, mq.question_text, mq.question_type,
-            mq.option_a, mq.option_b, mq.option_c, umq.completed_at
-     FROM module_questions mq
-     LEFT JOIN user_module_questions umq ON umq.question_id = mq.id AND umq.user_id = ?
-     WHERE mq.module_id IN (?) ORDER BY mq.module_id, mq.sort_order`,
-    [userId, moduleIds]
-  );
-  const questionsById = new Map();
-  questionRows.forEach((row) => {
-    const question = {
-      id: row.question_id,
-      type: row.question_type,
-      text: row.question_text,
-      options: row.question_type === 'mcq' ? { a: row.option_a, b: row.option_b, c: row.option_c } : null,
-      completed: Boolean(row.completed_at),
-    };
-    moduleById.get(row.module_id)?.questions.push(question);
-    questionsById.set(row.question_id, question);
-  });
-
-  const questionIds = [...questionsById.keys()];
-  if (questionIds.length) {
-    const [exercises] = await pool.query(
-      `SELECT id, question_id, function_name, starter_code FROM module_code_exercises WHERE question_id IN (?)`,
-      [questionIds]
-    );
-    if (exercises.length) {
-      const exerciseIds = exercises.map((exercise) => exercise.id);
-      const [tests] = await pool.query(
-        `SELECT id, exercise_id, assertion_expr, is_hidden FROM module_code_tests
-         WHERE exercise_id IN (?) ORDER BY exercise_id, sort_order`,
-        [exerciseIds]
-      );
-      const testsByExercise = new Map();
-      tests.forEach((test) => {
-        const list = testsByExercise.get(test.exercise_id) || [];
-        list.push({ id: test.id, assertion: test.assertion_expr, hidden: Boolean(test.is_hidden) });
-        testsByExercise.set(test.exercise_id, list);
-      });
-      exercises.forEach((exercise) => {
-        const question = questionsById.get(exercise.question_id);
-        if (question) {
-          question.code = {
-            functionName: exercise.function_name,
-            starterCode: exercise.starter_code,
-            tests: testsByExercise.get(exercise.id) || [],
-          };
-        }
-      });
-    }
-  }
-
   const [certificates] = await pool.query(
     'SELECT module_id, certificate_code, issued_at FROM module_certificates WHERE user_id = ? AND module_id IN (?)',
     [userId, moduleIds]
@@ -424,8 +358,6 @@ async function listModules(req, res) {
   const certificateByModule = new Map(certificates.map((certificate) => [certificate.module_id, certificate]));
   modules.forEach((module) => {
     const certificate = certificateByModule.get(module.id);
-    module.completed = module.questions.length > 0
-      && module.questions.every((question) => question.completed);
     module.certificate = certificate || null;
   });
 

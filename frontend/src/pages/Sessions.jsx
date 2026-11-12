@@ -7,16 +7,13 @@ import { DURATIONS, SESSION_STATUS, formatSessionRange, isLink, toLocalInputValu
 import { SkeletonBlock, SkeletonLines } from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
 
-// What this viewer can do with a session. Topic sessions follow the server's
-// rules; older skill-exchange sessions keep theirs.
+// What this viewer can do with a session (the server decides).
 function sessionPermissions(session) {
-  const isModule = Boolean(session.moduleSessionId);
   return {
-    isModule,
     expired: session.status === 'pending' && new Date(session.endsAt) < new Date(),
-    canConfirm: isModule ? session.canConfirm : session.status === 'pending' && !session.scheduledByMe,
-    canCancel: isModule ? session.canCancel : ['pending', 'confirmed'].includes(session.status),
-    canComplete: isModule && session.canComplete,
+    canConfirm: Boolean(session.canConfirm),
+    canCancel: Boolean(session.canCancel),
+    canComplete: Boolean(session.canComplete),
   };
 }
 
@@ -33,7 +30,7 @@ function dayLabel(value) {
 
 // One session as an agenda row: date block, who and what, when and where, status, actions.
 function SessionRow({ session, onUpdateStatus, quiet = false }) {
-  const { isModule, expired, canConfirm, canCancel, canComplete } = sessionPermissions(session);
+  const { expired, canConfirm, canCancel, canComplete } = sessionPermissions(session);
   const status = expired
     ? { label: 'Not answered in time', style: 'bg-stone-100 text-slate-500 border-stone-200' }
     : session.status === 'pending' && canConfirm
@@ -52,10 +49,10 @@ function SessionRow({ session, onUpdateStatus, quiet = false }) {
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="font-semibold text-slate-900">
-              {isModule ? session.moduleTitle : `You teach ${session.iTeach} · They teach ${session.theyTeach}`}
+              {session.moduleTitle}
             </p>
             <p className="text-sm text-slate-500">
-              {isModule ? `${session.isSpecialist ? 'Teaching' : 'with'} ${session.otherUserName || `User #${session.otherUserId}`}` : session.otherUserName}
+              {`${session.isSpecialist ? 'Teaching' : 'with'} ${session.otherUserName || `User #${session.otherUserId}`}`}
             </p>
           </div>
           <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium ${status.style}`}>{status.label}</span>
@@ -82,7 +79,7 @@ function SessionRow({ session, onUpdateStatus, quiet = false }) {
             </button>
           )}
           {!expired && session.status === 'pending' && session.scheduledByMe && <span className="text-sm text-slate-500">Waiting for them to accept…</span>}
-          {isModule && session.conversationId && (
+          {session.conversationId && (
             <Link to={`/modules?c=${session.conversationId}`} className="ml-auto text-sm font-medium text-brand-600 hover:underline">Open chat →</Link>
           )}
         </div>
@@ -174,8 +171,8 @@ export default function Sessions() {
   const bookFor = searchParams.get('moduleId');
 
   function loadSessions() {
-    Promise.all([axiosClient.get('/sessions/me'), axiosClient.get('/sessions/modules/me')])
-      .then(([regular, module]) => setSessions([...regular.data.data, ...module.data.data]))
+    axiosClient.get('/sessions/modules/me')
+      .then((response) => setSessions(response.data.data))
       .finally(() => setLoading(false));
   }
 
@@ -185,10 +182,7 @@ export default function Sessions() {
     setError('');
     setNotice('');
     try {
-      const endpoint = session.moduleSessionId
-        ? `/sessions/modules/${session.moduleSessionId}/status`
-        : `/sessions/${session.id}/status`;
-      const response = await axiosClient.patch(endpoint, { status });
+      const response = await axiosClient.patch(`/sessions/modules/${session.moduleSessionId}/status`, { status });
       setNotice(response.data.message || '');
       loadSessions();
     } catch (requestError) {
@@ -247,7 +241,7 @@ export default function Sessions() {
                 Needs your answer
               </h2>
               <ul className="space-y-3">
-                {needsAnswer.map((s) => <SessionRow key={`${s.moduleSessionId ? 'm' : 's'}${s.moduleSessionId || s.id}`} session={s} onUpdateStatus={handleUpdateStatus} />)}
+                {needsAnswer.map((s) => <SessionRow key={s.moduleSessionId} session={s} onUpdateStatus={handleUpdateStatus} />)}
               </ul>
             </section>
           )}
@@ -264,7 +258,7 @@ export default function Sessions() {
             <section key={day.label} className="mb-6">
               <h3 className="mb-2 text-sm font-semibold text-brand-600">{day.label}</h3>
               <ul className="space-y-3">
-                {day.sessions.map((s) => <SessionRow key={`${s.moduleSessionId ? 'm' : 's'}${s.moduleSessionId || s.id}`} session={s} onUpdateStatus={handleUpdateStatus} />)}
+                {day.sessions.map((s) => <SessionRow key={s.moduleSessionId} session={s} onUpdateStatus={handleUpdateStatus} />)}
               </ul>
             </section>
           ))}
@@ -280,7 +274,7 @@ export default function Sessions() {
             </button>
             {showPast && (
               past.length
-                ? <ul className="mt-3 space-y-3">{past.map((s) => <SessionRow key={`${s.moduleSessionId ? 'm' : 's'}${s.moduleSessionId || s.id}`} session={s} onUpdateStatus={handleUpdateStatus} quiet />)}</ul>
+                ? <ul className="mt-3 space-y-3">{past.map((s) => <SessionRow key={s.moduleSessionId} session={s} onUpdateStatus={handleUpdateStatus} quiet />)}</ul>
                 : <p className="mt-3 text-sm text-slate-500">No past sessions yet.</p>
             )}
           </section>
