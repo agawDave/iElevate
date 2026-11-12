@@ -2,9 +2,6 @@ const express = require('express');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
 const {
   updateUserStatus,
-  listDisputes,
-  resolveDispute,
-  systemStats,
   analytics,
 } = require('../controllers/adminController');
 const { listActivity, getReport } = require('../controllers/reportController');
@@ -25,7 +22,6 @@ const router = express.Router();
 router.use(requireAuth, requireRole('admin', 'moderator'));
 
 router.get('/overview', adminOverview);
-router.get('/stats', systemStats);
 router.get('/nav-counts', navCounts);
 router.get('/analytics', analytics);
 // Tracking and reporting: activity log, and participation / progress / completed reports.
@@ -45,8 +41,5 @@ router.patch('/users/:userId/status', updateUserStatus);
 router.get('/modules', listModulesForReview);
 router.get('/modules/:moduleId', getModuleForReview);
 router.patch('/modules/:moduleId', reviewSpecialistModule);
-
-router.get('/disputes', listDisputes);
-router.patch('/disputes/:disputeId', resolveDispute);
 
 module.exports = router;
