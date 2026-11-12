@@ -1,5 +1,5 @@
 @echo off
-echo Starting iElevate Frontend Server...
+echo Starting iELEVATE Frontend Server...
 cd frontend
 npm run dev
 pause

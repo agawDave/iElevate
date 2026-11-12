@@ -47,7 +47,7 @@ const apiLimiter = rateLimit({
 });
 app.use('/api', apiLimiter);
 
-app.get('/api/health', (req, res) => res.json({ success: true, message: 'iElevate API is running' }));
+app.get('/api/health', (req, res) => res.json({ success: true, message: 'iELEVATE API is running' }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);

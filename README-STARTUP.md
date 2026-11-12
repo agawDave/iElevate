@@ -1,4 +1,4 @@
-# iElevate Startup Guide
+# iELEVATE Startup Guide
 
 ## Quick Start (Easiest)
 

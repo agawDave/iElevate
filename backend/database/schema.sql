@@ -1,5 +1,5 @@
 -- =========================================================
--- iElevate Database Schema
+-- iELEVATE Database Schema
 -- Peer-to-peer skill exchange platform
 -- =========================================================
 

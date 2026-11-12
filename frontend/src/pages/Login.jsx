@@ -36,7 +36,7 @@ export default function Login() {
     <>
       <AuthShell
         title="Welcome back"
-        subtitle="Sign in to your iElevate account"
+        subtitle="Sign in to your iELEVATE account"
         aside={(
           <>
             <div>

@@ -45,7 +45,7 @@ export default function Signup() {
   return (
     <AuthShell
       title="Create your account"
-      subtitle="Join iElevate and start your skill journey"
+      subtitle="Join iELEVATE and start your skill journey"
       aside={(
         <>
           <div>

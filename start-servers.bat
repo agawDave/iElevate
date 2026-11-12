@@ -1,8 +1,8 @@
 @echo off
-REM Start both Backend and Frontend servers for iElevate
+REM Start both Backend and Frontend servers for iELEVATE
 
 echo ========================================
-echo Starting iElevate Servers
+echo Starting iELEVATE Servers
 echo ========================================
 echo.
 

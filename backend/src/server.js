@@ -19,7 +19,7 @@ async function start() {
   }
 
   httpServer.listen(PORT, () => {
-    console.log(`iElevate API + Socket.io listening on port ${PORT}`);
+    console.log(`iELEVATE API + Socket.io listening on port ${PORT}`);
   });
 }
 

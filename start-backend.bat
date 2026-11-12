@@ -1,5 +1,5 @@
 @echo off
-echo Starting iElevate Backend Server...
+echo Starting iELEVATE Backend Server...
 cd backend
 npm start
 pause

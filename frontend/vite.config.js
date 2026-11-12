@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
-        name: 'iElevate',
-        short_name: 'iElevate',
+        name: 'iELEVATE',
+        short_name: 'iELEVATE',
         description: 'The ELEVATE program of CTU-Tuburan: learn digital skills with a specialist, one topic at a time.',
         theme_color: '#022A49',
         background_color: '#F5F7F9',
