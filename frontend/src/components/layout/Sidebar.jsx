@@ -6,6 +6,7 @@ import axiosClient from '../../api/axiosClient';
 import { useSocket } from '../../context/SocketContext';
 import elevateLogo from '../../assets/elevate-logo.png';
 import LineIcon from '../ui/LineIcon';
+import { moduleEditorPath } from '../../lib/moduleStatus';
 
 const icons = {
   dashboard: (
@@ -174,11 +175,12 @@ export default function Sidebar() {
     if (!socket) return undefined;
     const handleNotification = (notification) => {
       // Messages show in the sidebar until the user replies (see awaitingReply), not as a pop-up.
-      if (notification.type === 'module_message') {
+      // A new chat message, or (for admins) a module sent for approval: just refresh the counts.
+      if (notification.type === 'module_message' || notification.type === 'module_submitted') {
         loadNotifications();
         return;
       }
-      if (!['module_session', 'module_application', 'module_activity'].includes(notification.type)) return;
+      if (!['module_session', 'module_application', 'module_activity', 'module_review'].includes(notification.type)) return;
       setMessageNotification(notification);
       loadNotifications();
     };
@@ -251,13 +253,14 @@ export default function Sidebar() {
             if (type === 'module_session') navigate('/sessions');
             else if (type === 'module_application') navigate(kind === 'accepted' ? `/modules?tab=ongoing&chat=${conversationId}` : kind === 'new' ? '/modules?tab=incoming' : '/modules');
             else if (type === 'module_activity') navigate(kind === 'reviewed' ? `/modules/${messageNotification.moduleId}` : '/modules?tab=ongoing');
+            else if (type === 'module_review') navigate(kind === 'approved' ? '/modules' : moduleEditorPath(messageNotification.moduleId));
             setMessageNotification(null);
           }}
           className="pop-enter fixed right-5 top-5 z-50 flex w-[min(24rem,calc(100vw-2rem))] items-start gap-3 rounded-xl bg-slate-900 px-4 py-3 text-left text-white shadow-xl"
           aria-live="polite"
         >
           <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-500 text-brand-900" aria-hidden="true">
-            <LineIcon name={{ module_session: 'calendar', module_application: 'clipboard', module_activity: 'pencil' }[messageNotification.type] || 'clipboard'} />
+            <LineIcon name={{ module_session: 'calendar', module_application: 'clipboard', module_activity: 'pencil', module_review: messageNotification.kind === 'approved' ? 'check' : 'pencil' }[messageNotification.type] || 'clipboard'} />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-xs font-semibold">{messageNotification.senderName} · {messageNotification.moduleTitle}</span>

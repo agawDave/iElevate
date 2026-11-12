@@ -12,6 +12,7 @@ import LearningPlan from '../pages/LearningPlan';
 import Modules from '../pages/Modules';
 import { MessagesRedirect, ModuleRedirect } from '../pages/ModuleRedirect';
 import ModulePage from '../pages/ModulePage';
+import SpecialistModuleEditor from '../pages/SpecialistModuleEditor';
 import Sessions from '../pages/Sessions';
 import Portfolio from '../pages/Portfolio';
 import AdminDashboard from '../pages/admin/AdminDashboard';
@@ -42,6 +43,8 @@ export default function AppRoutes() {
           <Route path="/modules/create" element={<Navigate to="/modules" replace />} />
           <Route path="/modules/:moduleId/chat" element={<ModuleRedirect />} />
           <Route path="/modules/:moduleId" element={<ModulePage />} />
+          <Route path="/teach/:topicId" element={<SpecialistModuleEditor />} />
+
           <Route path="/sessions" element={<Sessions />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/credentials" element={<Navigate to="/portfolio" replace />} />

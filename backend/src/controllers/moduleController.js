@@ -316,6 +316,51 @@ async function listModules(req, res) {
   topicRows.forEach((topic) => {
     moduleById.get(topic.module_id)?.topics.push(topic.topic_name);
   });
+
+  // Specialists' own modules for these topics.
+  //   specialist:  myModule = their module for the topic (null = not created yet)
+  //   beneficiary: specialistModule = the module of the specialist they applied
+  //                to or learn with; hasModules = some approved module exists
+  //                (otherwise the topic is "coming soon")
+  if (userType === 'specialist') {
+    const [mine] = await pool.query(
+      `SELECT id, topic_id, title, overview, hours, status, review_note, submitted_at, reviewed_at, approved_at
+       FROM specialist_modules WHERE specialist_id = ? AND topic_id IN (?)`,
+      [userId, moduleIds]
+    );
+    modules.forEach((module) => { module.myModule = null; });
+    mine.forEach((row) => {
+      const module = moduleById.get(row.topic_id);
+      if (!module) return;
+      module.myModule = {
+        id: row.id,
+        title: row.title,
+        overview: row.overview,
+        hours: Number(row.hours) || 0,
+        status: row.status,
+        reviewNote: row.review_note || '',
+        submittedAt: row.submitted_at,
+        reviewedAt: row.reviewed_at,
+        approvedAt: row.approved_at,
+      };
+    });
+  } else if (userType === 'beneficiary') {
+    const [approved] = await pool.query(
+      `SELECT sm.topic_id, sm.specialist_id, sm.title, sm.overview, sm.hours
+       FROM specialist_modules sm
+       JOIN users specialist ON specialist.id = sm.specialist_id AND specialist.status = 'active' AND specialist.user_type = 'specialist'
+       WHERE sm.status = 'approved' AND sm.topic_id IN (?)`,
+      [moduleIds]
+    );
+    modules.forEach((module) => {
+      const forTopic = approved.filter((row) => Number(row.topic_id) === Number(module.id));
+      module.hasModules = forTopic.length > 0;
+      const theirs = module.ownerId && ['pending', 'assigned'].includes(module.assignmentStatus)
+        ? forTopic.find((row) => Number(row.specialist_id) === Number(module.ownerId))
+        : null;
+      module.specialistModule = theirs ? { title: theirs.title, overview: theirs.overview, hours: Number(theirs.hours) || 0 } : null;
+    });
+  }
   modules.forEach((module) => {
     const matched = module.skills.filter((skill) => skill.matched);
     if (matched.length) {

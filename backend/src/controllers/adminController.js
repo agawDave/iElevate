@@ -67,31 +67,10 @@ async function systemStats(req, res) {
   });
 }
 
-async function listPendingModules(req, res) {
-  const [rows] = await pool.query(
-    `SELECT lm.id, lm.title, lm.description, lm.phase, lm.hours, lm.created_at,
-            u.full_name AS specialist_name
-     FROM learning_modules lm JOIN users u ON u.id = lm.owner_id
-     WHERE lm.approval_status = 'pending' ORDER BY lm.created_at ASC`
-  );
-  res.json({ success: true, data: rows });
-}
-
-async function reviewModule(req, res) {
-  const { status } = req.body;
-  if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ success: false, message: 'Invalid review status' });
-  const [result] = await pool.query(
-    'UPDATE learning_modules SET approval_status = ?, reviewed_by = ?, reviewed_at = NOW() WHERE id = ? AND approval_status = \'pending\'',
-    [status, req.user.id, req.params.moduleId]
-  );
-  if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Pending module not found' });
-  res.json({ success: true, message: `Module ${status}` });
-}
-
 // Program analytics: new (incoming), ongoing and completed learners per topic,
 // and each specialist's counts and weekly trend.
 async function analytics(req, res) {
   res.json({ success: true, data: await programAnalytics() });
 }
 
-module.exports = { analytics, updateUserStatus, listDisputes, resolveDispute, systemStats, listPendingModules, reviewModule };
+module.exports = { analytics, updateUserStatus, listDisputes, resolveDispute, systemStats };

@@ -5,8 +5,6 @@ const {
   listDisputes,
   resolveDispute,
   systemStats,
-  listPendingModules,
-  reviewModule,
   analytics,
 } = require('../controllers/adminController');
 const { listActivity, getReport } = require('../controllers/reportController');
@@ -15,10 +13,10 @@ const {
   getBeneficiary,
   listSpecialists,
   getSpecialist,
-  listModulesForReview,
   listUsers,
   navCounts,
 } = require('../controllers/adminDirectoryController');
+const { listModulesForReview, getModuleForReview, reviewSpecialistModule } = require('../controllers/specialistModuleController');
 const { beneficiaryPortfolio } = require('../controllers/portfolioController');
 const { adminOverview } = require('../controllers/adminOverviewController');
 
@@ -43,9 +41,10 @@ router.get('/specialists/:id', getSpecialist);
 router.get('/users', listUsers);
 router.patch('/users/:userId/status', updateUserStatus);
 
+// Module approval: the modules specialists create for ELEVATE topics.
 router.get('/modules', listModulesForReview);
-router.get('/modules/pending', listPendingModules);
-router.patch('/modules/:moduleId', reviewModule);
+router.get('/modules/:moduleId', getModuleForReview);
+router.patch('/modules/:moduleId', reviewSpecialistModule);
 
 router.get('/disputes', listDisputes);
 router.patch('/disputes/:disputeId', resolveDispute);

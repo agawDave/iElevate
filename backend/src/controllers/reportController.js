@@ -10,6 +10,7 @@ const ACTIONS = [
   'session_booked', 'session_confirmed', 'session_cancelled', 'session_completed', 'session_no_show',
   'activity_created', 'activity_answered', 'answer_reviewed', 'module_test',
   'certificate_issued', 'topic_reopened', 'portfolio_added', 'recommendation_requested', 'recommendation_written',
+  'module_submitted', 'module_approved', 'module_changes_requested',
 ];
 const SEXES = ['female', 'male', 'prefer_not_to_say'];
 const SECTORS = ['pwd', 'four_ps', 'indigenous', 'solo_parent', 'out_of_school_youth'];

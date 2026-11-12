@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import AppLayout from '../components/layout/AppLayout';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -19,6 +19,7 @@ import EmptyState from '../components/ui/EmptyState';
 import { avatarTint, initials } from '../lib/people';
 import { TopicBand } from '../components/ui/TopicFace';
 import { phaseInfo } from '../lib/topicFaces';
+import { moduleEditorPath, moduleStatusOf } from '../lib/moduleStatus';
 
 // The three stages (project-advisor recommendation):
 //   Incoming  - the beneficiary applied; waiting for the specialist to accept
@@ -78,6 +79,7 @@ function phaseStripe(phase) {
 
 const STAGE_BADGES = {
   apply: { label: 'Not applied yet', style: 'bg-stone-100 text-slate-600' },
+  soon: { label: 'Coming soon', style: 'bg-stone-100 text-slate-600' },
   queued: { label: 'Next up', style: 'bg-sky-50 text-sky-800' },
   incoming: { label: 'Incoming', style: 'bg-amber-50 text-amber-800' },
   ongoing: { label: 'Ongoing', style: 'bg-brand-50 text-brand-600' },
@@ -93,12 +95,13 @@ const buttonStyles = {
 
 // ---------------------------------------------------------------- learner view
 
-// The specialists who teach the topic and fit the learner; they apply to one.
-function SpecialistChoices({ options, busy, onApply }) {
+// The specialists who have an approved module for the topic and fit the
+// learner, each with their module; the learner applies to one.
+function SpecialistChoices({ options, topicHours, busy, onApply }) {
   return (
     <div>
       <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {options.length > 1 ? `Choose your specialist (${options.length} teach this topic)` : 'Your specialist for this topic'}
+        {options.length > 1 ? `Choose a specialist's module (${options.length})` : 'The module for this topic'}
       </p>
       <ul className="space-y-2">
         {options.map((option) => (
@@ -108,10 +111,20 @@ function SpecialistChoices({ options, busy, onApply }) {
               : <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[12px] font-bold ${avatarTint(option.name)}`} aria-hidden="true">{initials(option.name)}</span>}
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-slate-900">
-                {option.name}
+                {option.module?.title || option.name}
                 {option.best && options.length > 1 && <span className="ml-2 rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-semibold text-white">Best fit</span>}
               </p>
-              {option.reasons.length > 0 && <p className="mt-0.5 text-xs leading-5 text-slate-600">{option.reasons.join(' · ')}</p>}
+              {option.module && (
+                <p className="text-xs text-slate-600">
+                  by {option.name}
+                  {/* The card's band already shows the training design's hours. */}
+                  {option.module.hours && option.module.hours !== topicHours ? ` · ${option.module.hours} hours` : ''}
+                  {` · ${option.module.activities} activit${option.module.activities === 1 ? 'y' : 'ies'}`}
+                  {option.module.testQuestions ? ' · pre/post-test' : ''}
+                </p>
+              )}
+              {option.module?.overview && <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">{option.module.overview}</p>}
+              {option.reasons.length > 0 && <p className="mt-0.5 text-xs leading-5 text-slate-500">{option.reasons.join(' · ')}</p>}
             </div>
             <button type="button" disabled={Boolean(busy)} onClick={() => onApply(option)} className={`shrink-0 ${buttonStyles.primary}`}>
               {busy === option.specialistId ? 'Applying…' : 'Apply'}
@@ -129,7 +142,10 @@ function LearnerCard({ module, conversation, stage, options, progress, applyingT
   const unread = conversation?.unreadCount || 0;
   const total = progress?.total || 0;
   const done = progress?.done || 0;
-  const badge = STAGE_BADGES[stage === 'apply' && module.assignmentStatus === 'queued' ? 'queued' : stage];
+  // No specialist has an approved module for the topic yet.
+  const comingSoon = stage === 'apply' && module.assignmentStatus !== 'queued' && module.hasModules === false;
+  const badge = STAGE_BADGES[stage === 'apply' && module.assignmentStatus === 'queued' ? 'queued' : comingSoon ? 'soon' : stage];
+  const theirModule = stage !== 'apply' ? module.specialistModule : null;
   // The main (orange) button that opens the module page.
   let moduleButton = null;
   if (stage === 'ongoing' || stage === 'completed') {
@@ -144,10 +160,17 @@ function LearnerCard({ module, conversation, stage, options, progress, applyingT
   let status;
   if (stage === 'apply' && module.assignmentStatus === 'queued') {
     status = <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">{module.waitingReason || 'You can apply once you finish one of your current topics.'}</p>;
+  } else if (comingSoon) {
+    status = (
+      <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-3 py-2.5">
+        <p className="text-sm font-semibold text-slate-800">No module yet</p>
+        <p className="mt-0.5 text-xs leading-5 text-slate-600">No specialist has a module for this topic yet. It opens here as soon as one is approved.</p>
+      </div>
+    );
   } else if (stage === 'apply' && !options?.length) {
     status = <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900"><span className="font-semibold">No specialist fits yet.</span> {module.waitingReason || 'No specialist who teaches this topic fits your schedule and learning mode.'} You can apply once one does.</p>;
   } else if (stage === 'apply') {
-    status = <SpecialistChoices options={options} busy={applyingTo} onApply={(option) => onApply(module, option)} />;
+    status = <SpecialistChoices options={options} topicHours={module.hours} busy={applyingTo} onApply={(option) => onApply(module, option)} />;
   } else if (stage === 'incoming') {
     status = (
       <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -181,8 +204,10 @@ function LearnerCard({ module, conversation, stage, options, progress, applyingT
         <h3 className="text-lg font-semibold text-slate-900">{module.title}</h3>
         <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${badge.style}`}>{badge.check && <LineIcon name="check" strokeWidth={2.5} className="h-3.5 w-3.5" />}{badge.label}</span>
       </div>
-      {specialist && stage !== 'apply' && <p className="text-xs text-slate-500">with {specialist}</p>}
-      <p className="mb-4 mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{module.description}</p>
+      {specialist && stage !== 'apply' && (
+        <p className="text-xs text-slate-500">{theirModule ? <>Module: <span className="font-medium text-slate-700">{theirModule.title}</span> · </> : ''}with {specialist}</p>
+      )}
+      <p className="mb-4 mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{theirModule?.overview || module.description}</p>
       <div className="mb-4">{status}</div>
       <div className="mt-auto flex flex-wrap items-center gap-2">
         {moduleButton}
@@ -207,14 +232,62 @@ function LearnerCard({ module, conversation, stage, options, progress, applyingT
 
 // ------------------------------------------------------------- specialist view
 
-// One topic the specialist teaches, with how many learners are at each stage.
+// The specialist's next step for a topic whose module isn't approved yet.
+function ModuleNextStep({ module, status, mine }) {
+  const editor = moduleEditorPath(module.id);
+  if (status === 'none') {
+    return (
+      <div className="mb-4 rounded-xl border border-dashed border-accent-500/60 bg-accent-50 px-4 py-3.5">
+        <p className="text-sm font-semibold text-slate-900">Create your module for this topic</p>
+        <p className="mt-0.5 text-xs leading-5 text-slate-600">Beneficiaries can&apos;t apply to you for {module.title} until you create a module and the admin approves it.</p>
+        <Link to={editor} className={`mt-3 inline-block ${buttonStyles.primary}`}>Create module →</Link>
+      </div>
+    );
+  }
+  if (status === 'draft') {
+    return (
+      <div className="mb-4 rounded-xl border border-dashed border-stone-300 bg-stone-50 px-4 py-3.5">
+        <p className="text-sm font-semibold text-slate-900">Finish your module and submit it</p>
+        <p className="mt-0.5 text-xs leading-5 text-slate-600">It&apos;s saved as a draft. Add your materials and activities, then send it to the admin.</p>
+        <Link to={editor} className={`mt-3 inline-block ${buttonStyles.primary}`}>Continue →</Link>
+      </div>
+    );
+  }
+  if (status === 'changes_requested') {
+    return (
+      <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+        <p className="text-xs font-bold uppercase tracking-wide text-red-700">Note from the admin</p>
+        <p className="mt-0.5 line-clamp-3 whitespace-pre-line text-sm text-red-900">{mine.reviewNote}</p>
+        <Link to={editor} className={`mt-3 inline-block ${buttonStyles.primary}`}>Edit and resubmit →</Link>
+      </div>
+    );
+  }
+  if (status === 'pending') {
+    return <p className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">Sent to the admin{mine.submittedAt ? ` on ${formatDay(mine.submittedAt)}` : ''}. You can keep adding activities while you wait.</p>;
+  }
+  return null;
+}
+
+// One topic the specialist teaches: their own module for it (or the step to
+// create one), and how many learners are at each stage.
 function TeachingTopicCard({ module, counts, waiting = 0, activityCount, testQuestionCount, onOpenTab, onMaterials, onActivities }) {
+  const mine = module.myModule;
+  const status = mine?.status || 'none';
+  const statusInfo = moduleStatusOf(mine);
+  const live = status === 'approved' || status === 'pending';
+  const hasLearners = counts.incoming + counts.ongoing + counts.completed > 0;
   return (
     <article className="relative flex flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
-      <TopicBand slug={module.slug} title={module.title} phase={module.phase} hours={module.hours} />
+      <TopicBand slug={module.slug} title={module.title} phase={module.phase} hours={mine?.hours || module.hours} />
       <div className="flex flex-1 flex-col p-6">
-      <h3 className="mb-1 min-w-0 text-lg font-semibold text-slate-900">{module.title}</h3>
-      <p className="mb-4 line-clamp-2 text-sm leading-6 text-slate-600">{module.description}</p>
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="min-w-0 text-lg font-semibold text-slate-900">{mine?.title || module.title}</h3>
+        <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${statusInfo.style}`}>{statusInfo.check && <LineIcon name="check" strokeWidth={2.5} className="h-3.5 w-3.5" />}{statusInfo.label}</span>
+      </div>
+      {mine && mine.title !== module.title && <p className="text-xs text-slate-500">ELEVATE topic: {module.title}</p>}
+      <p className="mb-4 mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{mine?.overview || module.description}</p>
+      <ModuleNextStep module={module} status={status} mine={mine} />
+      {(status === 'approved' || hasLearners) && (
       <div className="mb-4 grid grid-cols-3 gap-2">
         {STAGES.map((stage) => {
           const highlight = stage.key === 'incoming' && counts.incoming > 0;
@@ -232,18 +305,25 @@ function TeachingTopicCard({ module, counts, waiting = 0, activityCount, testQue
           );
         })}
       </div>
+      )}
       {!module.canAddMaterials && <p className="mb-3 text-xs text-slate-500">You no longer teach this topic. Your current learners stay with you.</p>}
-      <p className={`mb-3 text-xs ${activityCount && testQuestionCount ? 'text-slate-500' : 'text-amber-800'}`}>
-        {testQuestionCount ? `Pre/post test: ${testQuestionCount} question${testQuestionCount === 1 ? '' : 's'}` : 'No pre/post test yet'}
-        {' · '}
-        {activityCount ? `${activityCount} activit${activityCount === 1 ? 'y' : 'ies'}` : 'no activities yet'}
-      </p>
-      <div className="mt-auto flex flex-wrap gap-2">
-        <button type="button" onClick={onActivities} className={activityCount && testQuestionCount ? buttonStyles.outline : buttonStyles.primary}>
-          Tests &amp; activities
-        </button>
-        <button type="button" onClick={onMaterials} className={buttonStyles.outline}>Materials</button>
-      </div>
+      {live && (
+        <>
+          <p className={`mb-3 text-xs ${activityCount && testQuestionCount ? 'text-slate-500' : 'text-amber-800'}`}>
+            {mine?.hours ? `${mine.hours} hours · ` : ''}
+            {activityCount ? `${activityCount} activit${activityCount === 1 ? 'y' : 'ies'}` : 'no activities yet'}
+            {' · '}
+            {testQuestionCount ? `pre/post-test: ${testQuestionCount} question${testQuestionCount === 1 ? '' : 's'}` : 'no pre/post-test yet'}
+          </p>
+          <div className="mt-auto flex flex-wrap gap-2">
+            <button type="button" onClick={onActivities} className={activityCount && testQuestionCount ? buttonStyles.outline : buttonStyles.primary}>
+              Tests &amp; activities
+            </button>
+            <button type="button" onClick={onMaterials} className={buttonStyles.outline}>Materials</button>
+            <Link to={moduleEditorPath(module.id)} className={buttonStyles.outline}>Edit module</Link>
+          </div>
+        </>
+      )}
       </div>
     </article>
   );
@@ -335,6 +415,7 @@ export default function Modules() {
   const { user } = useAuth();
   const { socket } = useSocket();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const isSpecialist = user?.userType === 'specialist';
   const [modules, setModules] = useState([]);
@@ -348,7 +429,8 @@ export default function Modules() {
   const [recommendationFor, setRecommendationFor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  // A message passed from another page (e.g. "sent to the admin" after submitting a module).
+  const [notice, setNotice] = useState(() => location.state?.notice || '');
   const [busy, setBusy] = useState('');
   const [materialsFor, setMaterialsFor] = useState(null);
   const [profileFor, setProfileFor] = useState(null);
@@ -378,6 +460,10 @@ export default function Modules() {
   }, [isSpecialist]);
 
   useEffect(() => { load(); }, [load]);
+  // Show a passed-in message once; a reload doesn't bring it back.
+  useEffect(() => {
+    if (location.state?.notice) navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+  }, [location, navigate]);
   useEffect(() => {
     if (!socket) return undefined;
     // The user sent a message: reload so its "waiting for your reply" dots go away.
@@ -555,7 +641,7 @@ export default function Modules() {
       />
     ) : (
       <EmptyCard>
-        <EmptyState icon="book" primary title="You don't teach any topics yet" action={{ to: '/learning-plan', label: 'Choose your topics' }}>Pick the ELEVATE topics you teach in your teaching plan, and beneficiaries can apply to you.</EmptyState>
+        <EmptyState icon="book" primary title="You don't teach any topics yet" action={{ to: '/learning-plan', label: 'Choose your topics' }}>Pick the ELEVATE topics you teach in your teaching plan. Then create your module for each one here.</EmptyState>
       </EmptyCard>
     );
   } else if (tab === 'incoming') {
@@ -677,7 +763,7 @@ export default function Modules() {
         eyebrow="E.L.E.V.A.T.E. learning center"
         title={isSpecialist ? 'Your ELEVATE teaching topics' : 'Your ELEVATE modules'}
         subtitle={isSpecialist
-          ? 'Accept the beneficiaries who apply to your topics, guide them, then mark them completed with their certificate.'
+          ? 'Create your module for each topic you teach. Once the admin approves it, beneficiaries can apply to you. Guide them, then mark them completed with their certificate.'
           : 'For each topic, choose a specialist and apply. Once they accept, learn with them until they give you your certificate.'}
         actions={isSpecialist && teachingTopics.length > 0 && (
           <button type="button" onClick={() => setMaterialsFor(teachingTopics[0].id)} className={headerButtonClass}>Teaching materials</button>

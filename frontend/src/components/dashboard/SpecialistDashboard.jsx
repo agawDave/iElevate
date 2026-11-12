@@ -7,6 +7,7 @@ import { DashboardSkeleton } from '../ui/Skeleton';
 import EmptyState from '../ui/EmptyState';
 import { TopicTile } from '../ui/TopicFace';
 import { avatarTint, initials } from '../../lib/people';
+import { MODULE_STATUS, moduleEditorPath } from '../../lib/moduleStatus';
 
 // The specialist's dashboard: a navy banner, their numbers, their learners'
 // progress, upcoming sessions, their topics, and the learner trends at the bottom.
@@ -56,7 +57,11 @@ function LearnerRow({ learner }) {
   );
 }
 
+const MODULE_ACTIONS = { none: 'Create module', draft: 'Continue', changes_requested: 'Edit module' };
+
 function TopicRow({ topic }) {
+  const status = topic.moduleStatus || 'none';
+  const statusInfo = MODULE_STATUS[status] || MODULE_STATUS.none;
   const counts = [
     `${topic.learners} learner${topic.learners === 1 ? '' : 's'}`,
     topic.applications ? `${topic.applications} applied` : null,
@@ -67,12 +72,15 @@ function TopicRow({ topic }) {
       <div className="min-w-0 flex-1">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-slate-900">{topic.title}</p>
-          <p className="text-xs text-slate-500">{topic.phase} · {counts}</p>
+          <p className="truncate text-sm font-semibold text-slate-900">{topic.moduleTitle || topic.title}</p>
+          <p className="text-xs text-slate-500">{topic.moduleTitle && topic.moduleTitle !== topic.title ? `${topic.title} · ` : `${topic.phase} · `}{counts}</p>
         </div>
-        <Link to={`/modules?activities=${topic.moduleId}`} className={smallButton}>Activities</Link>
+        {MODULE_ACTIONS[status]
+          ? <Link to={moduleEditorPath(topic.moduleId)} className="shrink-0 rounded-lg bg-accent-500 px-3 py-1 text-xs font-bold text-brand-900 hover:bg-accent-550">{MODULE_ACTIONS[status]}</Link>
+          : <Link to={`/modules?activities=${topic.moduleId}`} className={smallButton}>Activities</Link>}
       </div>
       <p className="mt-1 flex flex-wrap gap-2 text-[12px] font-semibold">
+        <span className={`rounded-full px-2 py-0.5 ${statusInfo.style}`}>{statusInfo.label}</span>
         {topic.activities
           ? <span className="rounded-full bg-stone-100 px-2 py-0.5 text-slate-600">{topic.activities} activit{topic.activities === 1 ? 'y' : 'ies'}</span>
           : <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">No activities yet</span>}

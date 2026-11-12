@@ -211,13 +211,15 @@ async function specialistDashboard(req, res) {
     q('SELECT COUNT(*) AS n FROM module_certificates WHERE issued_by = ?', [me]),
     // The topics they teach (and any topic where they still have learners).
     q(`SELECT DISTINCT lm.id, lm.slug, lm.title, lm.phase, lm.sort_order,
-              (SELECT COUNT(*) FROM module_activities act WHERE act.module_id = lm.id AND act.specialist_id = ?) AS activities
+              (SELECT COUNT(*) FROM module_activities act WHERE act.module_id = lm.id AND act.specialist_id = ?) AS activities,
+              (SELECT sm.status FROM specialist_modules sm WHERE sm.topic_id = lm.id AND sm.specialist_id = ?) AS module_status,
+              (SELECT sm.title FROM specialist_modules sm WHERE sm.topic_id = lm.id AND sm.specialist_id = ?) AS module_title
        FROM learning_modules lm
        WHERE lm.is_elevate_program = 1 AND lm.approval_status = 'approved' AND (
          EXISTS (SELECT 1 FROM module_skills ms JOIN user_skills us ON us.skill_id = ms.skill_id AND us.relation_type = 'teaches' AND us.user_id = ?
                  WHERE ms.module_id = lm.id AND ms.is_primary = 1)
          OR EXISTS (SELECT 1 FROM elevate_module_assignments a WHERE a.module_id = lm.id AND a.specialist_id = ? AND a.assignment_status = 'assigned'))
-       ORDER BY lm.sort_order, lm.id`, [me, me, me]),
+       ORDER BY lm.sort_order, lm.id`, [me, me, me, me, me]),
   ]);
 
   const key = (moduleId, beneficiaryId) => `${Number(moduleId)}:${Number(beneficiaryId)}`;
@@ -274,6 +276,9 @@ async function specialistDashboard(req, res) {
     phase: row.phase,
     activities: Number(row.activities) || 0,
     testQuestions: questionsBy.get(Number(row.id)) || 0,
+    // Their own module for the topic: null (not created), draft, pending, approved, changes_requested.
+    moduleStatus: row.module_status || null,
+    moduleTitle: row.module_title || null,
     learners: current.filter((learner) => learner.moduleId === Number(row.id)).length,
     applications: applications.filter((item) => Number(item.module_id) === Number(row.id)).length,
   }));

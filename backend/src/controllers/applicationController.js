@@ -51,16 +51,39 @@ async function listOptions(req, res) {
     ? await pool.query('SELECT id, full_name, avatar_url, city FROM users WHERE id IN (?)', [ids])
     : [[]];
   const personById = new Map(people.map((person) => [Number(person.id), person]));
+  // Each specialist's own (approved) module for the topic, with what's in it.
+  const topicIds = [...options.keys()];
+  const [moduleRows] = topicIds.length && ids.length
+    ? await pool.query(
+      `SELECT sm.topic_id, sm.specialist_id, sm.title, sm.overview, sm.hours,
+              (SELECT COUNT(*) FROM module_activities a WHERE a.module_id = sm.topic_id AND a.specialist_id = sm.specialist_id) AS activities,
+              (SELECT COUNT(*) FROM module_test_questions q WHERE q.module_id = sm.topic_id AND q.specialist_id = sm.specialist_id) AS test_questions
+       FROM specialist_modules sm
+       WHERE sm.status = 'approved' AND sm.topic_id IN (?) AND sm.specialist_id IN (?)`,
+      [topicIds, ids]
+    )
+    : [[]];
+  const moduleOf = new Map(moduleRows.map((row) => [`${row.topic_id}:${row.specialist_id}`, row]));
   const data = {};
   options.forEach((list, moduleId) => {
-    data[moduleId] = list.map((option) => ({
-      specialistId: option.specialistId,
-      name: personById.get(option.specialistId)?.full_name || 'Specialist',
-      avatar: personById.get(option.specialistId)?.avatar_url || null,
-      city: personById.get(option.specialistId)?.city || null,
-      best: option.best,
-      reasons: option.reasons,
-    }));
+    data[moduleId] = list.map((option) => {
+      const module = moduleOf.get(`${moduleId}:${option.specialistId}`);
+      return {
+        specialistId: option.specialistId,
+        name: personById.get(option.specialistId)?.full_name || 'Specialist',
+        avatar: personById.get(option.specialistId)?.avatar_url || null,
+        city: personById.get(option.specialistId)?.city || null,
+        best: option.best,
+        reasons: option.reasons,
+        module: module ? {
+          title: module.title,
+          overview: module.overview,
+          hours: Number(module.hours) || 0,
+          activities: Number(module.activities),
+          testQuestions: Number(module.test_questions),
+        } : null,
+      };
+    });
   });
   res.json({ success: true, data });
 }

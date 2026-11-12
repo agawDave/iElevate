@@ -301,51 +301,7 @@ async function getSpecialist(req, res) {
   });
 }
 
-// ----------------------------------------------------------- module approval
-
-async function listModulesForReview(req, res) {
-  const pageInfo = paging(req.query);
-  // Specialist-submitted modules only; ELEVATE topics come from the program.
-  const where = ['lm.owner_id IS NOT NULL'];
-  const params = [];
-  const like = searchTerm(req.query);
-  if (like) {
-    where.push('(lm.title LIKE ? OR lm.description LIKE ? OR u.full_name LIKE ?)');
-    params.push(like, like, like);
-  }
-  const tabWhere = where.join(' AND ');
-  const tabParams = [...params];
-  const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : 'pending';
-  if (req.query.status !== 'all') {
-    where.push('lm.approval_status = ?');
-    params.push(status);
-  }
-  const whereSql = where.join(' AND ');
-  const [[{ total }]] = await pool.query(
-    `SELECT COUNT(*) AS total FROM learning_modules lm LEFT JOIN users u ON u.id = lm.owner_id WHERE ${whereSql}`,
-    params
-  );
-  const [rows] = await pool.query(
-    `SELECT lm.id, lm.title, lm.description, lm.phase, lm.hours, lm.approval_status, lm.created_at, lm.reviewed_at,
-            u.full_name AS specialist_name, u.email AS specialist_email, reviewer.full_name AS reviewer_name
-     FROM learning_modules lm
-     LEFT JOIN users u ON u.id = lm.owner_id
-     LEFT JOIN users reviewer ON reviewer.id = lm.reviewed_by
-     WHERE ${whereSql}
-     ORDER BY ${status === 'pending' && req.query.status !== 'all' ? 'lm.created_at ASC' : 'lm.created_at DESC'}, lm.id
-     LIMIT ? OFFSET ?`,
-    [...params, pageInfo.pageSize, pageInfo.offset]
-  );
-  pageResponse(res, rows, Number(total), pageInfo, {
-    counts: await countRow(
-      `SELECT SUM(lm.approval_status = 'pending') AS pending, SUM(lm.approval_status = 'approved') AS approved,
-              SUM(lm.approval_status = 'rejected') AS rejected
-       FROM learning_modules lm LEFT JOIN users u ON u.id = lm.owner_id
-       WHERE ${tabWhere}`,
-      tabParams
-    ),
-  });
-}
+// Module approval lives in specialistModuleController (specialists' own modules).
 
 // ------------------------------------------------------------------- users
 
@@ -404,7 +360,7 @@ async function navCounts(req, res) {
        (SELECT COUNT(*) FROM users WHERE user_type = 'beneficiary' AND role = 'user') AS beneficiaries,
        (SELECT COUNT(*) FROM users WHERE user_type = 'specialist' AND role = 'user') AS specialists,
        (SELECT COUNT(*) FROM users) AS users,
-       (SELECT COUNT(*) FROM learning_modules WHERE owner_id IS NOT NULL AND approval_status = 'pending') AS pending_modules,
+       (SELECT COUNT(*) FROM specialist_modules WHERE status = 'pending') AS pending_modules,
        (SELECT COUNT(*) FROM elevate_module_assignments WHERE assignment_status = 'waiting') AS waiting_topics`
   );
   res.json({ success: true, data: Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value) || 0])) });
@@ -415,7 +371,6 @@ module.exports = {
   getBeneficiary,
   listSpecialists,
   getSpecialist,
-  listModulesForReview,
   listUsers,
   navCounts,
 };

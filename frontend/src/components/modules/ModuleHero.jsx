@@ -48,6 +48,7 @@ export default function ModuleHero({ module, specialist, progress, completed, ch
             {[module.phase, info.name, module.hours && `${module.hours} hours`].filter(Boolean).join(' · ')}
           </p>
           <h1 className="mt-1 text-[28px] font-extrabold leading-tight tracking-tight">{module.title}</h1>
+          {module.topic && module.topic !== module.title && <p className="text-xs font-semibold text-brand-200">ELEVATE topic: {module.topic}</p>}
           {module.description && <p className="mt-1 text-sm text-brand-100">{module.description}</p>}
         </div>
         {(progress.total > 0 || completed) && <ProgressRing done={progress.done} total={progress.total} completed={completed} />}

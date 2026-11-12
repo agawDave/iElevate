@@ -22,6 +22,9 @@ export const ACTIVITY_LABELS = {
   portfolio_added: 'Added to their portfolio',
   recommendation_requested: 'Asked for a recommendation',
   recommendation_written: 'Wrote a recommendation',
+  module_submitted: 'Sent a module for approval',
+  module_approved: 'Approved a module',
+  module_changes_requested: 'Asked for changes to a module',
 };
 
 // Groups for the colored marker next to each entry.
@@ -32,6 +35,7 @@ export const ACTIVITY_GROUPS = {
   session_booked: 'session', session_confirmed: 'session', session_cancelled: 'session', session_completed: 'session', session_no_show: 'session',
   activity_created: 'learning', activity_answered: 'learning', answer_reviewed: 'learning', module_test: 'learning',
   certificate_issued: 'done', topic_reopened: 'stage', portfolio_added: 'learning', recommendation_requested: 'done', recommendation_written: 'done',
+  module_submitted: 'learning', module_approved: 'done', module_changes_requested: 'stage',
 };
 
 export const ACTIVITY_GROUP_STYLES = {

@@ -49,6 +49,8 @@ async function loadMatchingContext(connection, learnerId) {
   );
   const moduleIds = topics.map((topic) => topic.module_id);
 
+  // Candidates: specialists who teach the topic AND have an approved module
+  // for it (specialists create their own module; the admin approves it).
   const [candidates] = moduleIds.length
     ? await connection.query(
       `SELECT ms.module_id, specialist.id AS specialist_id,
@@ -57,10 +59,14 @@ async function loadMatchingContext(connection, learnerId) {
        JOIN user_skills teaches ON teaches.skill_id = ms.skill_id AND teaches.relation_type = 'teaches'
        JOIN users specialist ON specialist.id = teaches.user_id
          AND specialist.user_type = 'specialist' AND specialist.status = 'active'
+       JOIN specialist_modules sm ON sm.topic_id = ms.module_id AND sm.specialist_id = specialist.id
+         AND sm.status = 'approved'
        WHERE ms.module_id IN (?) AND ms.is_primary = 1`,
       [moduleIds]
     )
     : [[]];
+  // Topics with at least one approved module (the others are "coming soon").
+  const topicsWithModules = new Set(candidates.map((row) => Number(row.module_id)));
   const specialistIds = [...new Set(candidates.map((row) => Number(row.specialist_id)))];
 
   const [loadRows] = specialistIds.length
@@ -146,7 +152,11 @@ async function loadMatchingContext(connection, learnerId) {
         || a.specialistId - b.specialistId);
   }
 
-  return { topics, existing, evaluate, rank, stillTeaches };
+  return { topics, existing, evaluate, rank, stillTeaches, topicsWithModules };
+}
+
+function noModuleYet(topicTitle) {
+  return `No specialist has a module for ${topicTitle} yet. It opens here once one is approved.`;
 }
 
 // Keeps a learner's topic assignments up to date. The learner chooses the
@@ -161,7 +171,7 @@ async function recomputeElevateAssignments(beneficiaryId, connection = pool) {
   // One update of a learner's matches at a time: a second one (e.g. two page
   // requests at once) waits here instead of deadlocking on the same rows.
   await lockLearner(connection, learnerId);
-  const { topics, existing, evaluate, rank, stillTeaches } = await loadMatchingContext(connection, learnerId);
+  const { topics, existing, evaluate, rank, stillTeaches, topicsWithModules } = await loadMatchingContext(connection, learnerId);
 
   const desired = new Map();
   topics.forEach((topic) => {
@@ -229,7 +239,9 @@ async function recomputeElevateAssignments(beneficiaryId, connection = pool) {
         score: 0,
         status: 'waiting',
         reasons: [],
-        waitingReason: describeTeachingWaiting(topic.title, evaluations, topic.learner_proficiency),
+        waitingReason: topicsWithModules.has(moduleId)
+          ? describeTeachingWaiting(topic.title, evaluations, topic.learner_proficiency)
+          : noModuleYet(topic.title),
         appliedAt: null,
       });
   });

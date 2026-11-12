@@ -380,6 +380,7 @@ async function learnerAssignment(beneficiaryId, moduleId) {
   const [rows] = await pool.query(
     `SELECT a.specialist_id, specialist.full_name AS specialist_name, specialist.avatar_url AS specialist_avatar,
             lm.id, lm.slug, lm.title, lm.phase, lm.description, lm.hours,
+            sm.title AS module_title, sm.overview AS module_overview, sm.hours AS module_hours,
             cert.id AS certificate_id, cert.issued_at AS certificate_issued_at,
             cert.file_storage_name IS NOT NULL AS certificate_has_file, issuer.full_name AS certificate_issuer,
             (SELECT c.id FROM conversations c WHERE c.module_id = a.module_id
@@ -388,6 +389,7 @@ async function learnerAssignment(beneficiaryId, moduleId) {
      FROM elevate_module_assignments a
      JOIN learning_modules lm ON lm.id = a.module_id
      JOIN users specialist ON specialist.id = a.specialist_id
+     LEFT JOIN specialist_modules sm ON sm.topic_id = a.module_id AND sm.specialist_id = a.specialist_id
      LEFT JOIN module_certificates cert ON cert.user_id = a.beneficiary_id AND cert.module_id = a.module_id
      LEFT JOIN users issuer ON issuer.id = cert.issued_by
      WHERE a.beneficiary_id = ? AND a.module_id = ? AND a.assignment_status = 'assigned'`,
@@ -474,7 +476,17 @@ async function learnerModule(req, res) {
   res.json({
     success: true,
     data: {
-      module: { id: assignment.id, slug: assignment.slug, title: assignment.title, phase: assignment.phase, description: assignment.description, hours: assignment.hours },
+      // The specialist's own module for the topic (title, overview, hours), with
+      // the training-design topic as the fallback.
+      module: {
+        id: assignment.id,
+        slug: assignment.slug,
+        title: assignment.module_title || assignment.title,
+        topic: assignment.title,
+        phase: assignment.phase,
+        description: assignment.module_overview || assignment.description,
+        hours: assignment.module_hours || assignment.hours,
+      },
       specialist: { id: assignment.specialist_id, name: assignment.specialist_name, avatar: assignment.specialist_avatar || null },
       conversationId: assignment.conversation_id,
       completed,
