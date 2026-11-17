@@ -4,15 +4,15 @@ import { useAuth } from '../context/AuthContext';
 import AuthShell, { PillInput, authButtonClass, authErrorClass, authLinkClass } from '../components/auth/AuthShell';
 
 const steps = [
-  { title: 'Create your profile', desc: 'Choose your role and set up your skills' },
-  { title: 'Get matched', desc: 'Our algorithm finds your best skill partner' },
-  { title: 'Schedule a session', desc: 'Book and connect with your match' },
-  { title: 'Earn credentials', desc: 'Receive verified blockchain certificates' },
+  { title: 'Create your account', desc: 'As a beneficiary who wants to learn, or a specialist who teaches' },
+  { title: 'Take the skill check', desc: 'Beneficiaries find the ELEVATE topics they need; specialists pick the topics they teach' },
+  { title: 'Learn with a specialist', desc: "Apply to a specialist's module, then chat, book sessions and do the activities" },
+  { title: 'Earn your certificate', desc: 'Your specialist issues it, and it goes into your portfolio' },
 ];
 
 const ROLES = [
-  { value: 'specialist', label: 'Specialist', desc: 'Share skills · Build reputation' },
-  { value: 'beneficiary', label: 'Beneficiary', desc: 'Find specialists · Level up your skills' },
+  { value: 'specialist', label: 'Specialist', desc: 'Teach topics · Create modules' },
+  { value: 'beneficiary', label: 'Beneficiary', desc: 'Skill check · Learn with a specialist' },
 ];
 
 export default function Signup() {

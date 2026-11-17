@@ -1,9 +1,23 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import axiosClient from '../api/axiosClient';
 import AuthShell, { PillInput, authButtonClass, authErrorClass, authLinkClass } from '../components/auth/AuthShell';
 
+const FEATURES = ['Skill check', 'Specialist-guided modules', 'Pre- and post-tests', 'Certificates & portfolio'];
+
+// The program's real size (topics, phases, hours), read from the database so
+// the numbers stay true. Nothing shows until they've loaded.
+function useProgramFacts() {
+  const [facts, setFacts] = useState(null);
+  useEffect(() => {
+    axiosClient.get('/public/program').then((response) => setFacts(response.data.data)).catch(() => {});
+  }, []);
+  return facts;
+}
+
 export default function Login() {
+  const facts = useProgramFacts();
   const { login } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
@@ -43,10 +57,10 @@ export default function Login() {
               <h2 className="text-4xl font-extrabold leading-tight mb-1 tracking-tight text-white">Learn by doing.</h2>
               <h2 className="text-4xl font-extrabold leading-tight text-accent-500 mb-4 tracking-tight">Grow by sharing.</h2>
               <p className="text-brand-100 max-w-sm mb-6">
-                Connect with specialists, exchange skills, and earn blockchain credentials.
+                Take a quick skill check, learn the ELEVATE topics you need with a specialist, and earn certificates for your portfolio.
               </p>
               <div className="flex flex-wrap gap-2">
-                {['Bidirectional matching', 'Blockchain creds', 'Real-time chat', 'Portfolio builder'].map((t) => (
+                {FEATURES.map((t) => (
                   <span key={t} className="text-xs bg-white/15 rounded-full px-3 py-1.5">
                     {t}
                   </span>
@@ -54,20 +68,20 @@ export default function Login() {
               </div>
             </div>
 
-            <div className="flex gap-8 text-sm">
-              <div>
-                <p className="text-2xl font-bold">2,400+</p>
-                <p className="text-brand-200">Active students</p>
+            {facts ? (
+              <div className="flex gap-8 text-sm">
+                {[
+                  { value: facts.topics, label: 'Training topics' },
+                  { value: facts.phases, label: 'Program phases' },
+                  { value: facts.hours, label: 'Training hours' },
+                ].map((fact) => (
+                  <div key={fact.label}>
+                    <p className="text-2xl font-bold tabular-nums">{fact.value}</p>
+                    <p className="text-brand-200">{fact.label}</p>
+                  </div>
+                ))}
               </div>
-              <div>
-                <p className="text-2xl font-bold">180+</p>
-                <p className="text-brand-200">Skill categories</p>
-              </div>
-              <div>
-                <p className="text-2xl font-bold">98%</p>
-                <p className="text-brand-200">Satisfaction</p>
-              </div>
-            </div>
+            ) : <div />}
           </>
         )}
         footer={(
