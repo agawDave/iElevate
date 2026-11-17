@@ -12,6 +12,7 @@ const PATHS = {
   doc: <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Zm0 0v5h5M9 13h6M9 17h4" />,
   award: <path d="M12 15a6 6 0 1 0 0-12 6 6 0 0 0 0 12Zm-3.5-1L7 21l5-3 5 3-1.5-7" />,
   chart: <path d="M4 20V10m6 10V4m6 16v-7m4 7H3" />,
+  alert: <path d="M12 4 2.5 20h19L12 4Zm0 6v4.5m0 3h.01" />,
 };
 
 export default function LineIcon({ name, className = 'h-4 w-4', strokeWidth = 2 }) {

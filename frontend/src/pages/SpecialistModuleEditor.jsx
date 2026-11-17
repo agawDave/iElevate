@@ -54,7 +54,7 @@ export default function SpecialistModuleEditor() {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [panel, setPanel] = useState(''); // 'materials' | 'activities'
+  const [panel, setPanel] = useState(''); // 'materials' | 'activities' | 'test'
 
   const load = useCallback(async ({ keepForm = false } = {}) => {
     try {
@@ -223,7 +223,7 @@ export default function SpecialistModuleEditor() {
                 title="Pre/post-test"
                 detail={counts.testQuestions ? `${counts.testQuestions} question${counts.testQuestions === 1 ? '' : 's'}` : 'Not added yet · optional'}
                 button={counts.testQuestions ? 'Edit questions' : 'Add questions'}
-                onClick={() => setPanel('activities')}
+                onClick={() => setPanel('test')}
               />
             </ul>
           </section>
@@ -271,7 +271,7 @@ export default function SpecialistModuleEditor() {
       </div>
 
       {panel === 'materials' && <MaterialsPanel topicId={topic.id} onClose={closePanel} />}
-      {panel === 'activities' && <ActivitiesPanel topicId={topic.id} topics={[{ id: topic.id, title: topic.title }]} onClose={closePanel} onChanged={() => load({ keepForm: true })} />}
+      {(panel === 'activities' || panel === 'test') && <ActivitiesPanel topicId={topic.id} topics={[{ id: topic.id, title: topic.title }]} start={panel} onClose={closePanel} onChanged={() => load({ keepForm: true })} />}
     </AppLayout>
   );
 }

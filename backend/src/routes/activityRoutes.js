@@ -4,6 +4,7 @@ const { uploadActivityFile } = require('../middleware/activityFileUpload');
 const {
   listMine,
   createActivity,
+  createMultipleChoiceActivities,
   updateActivity,
   deleteActivity,
   specialistSummary,
@@ -23,8 +24,10 @@ router.get('/answers/:answerId/file/link', requireAuth, answerFileLink);
 router.get('/:activityId/file/link', requireAuth, taskFileLink);
 // Specialists: their activities for a topic, learners' progress and answers.
 // Creating and editing take JSON, or a form with a file for file tasks.
+// /bulk adds many multiple-choice activities at once (a pasted quiz).
 router.get('/', requireAuth, listMine);
 router.post('/', requireAuth, uploadActivityFile, createActivity);
+router.post('/bulk', requireAuth, createMultipleChoiceActivities);
 router.get('/summary', requireAuth, specialistSummary);
 router.get('/answers', requireAuth, learnerAnswers);
 router.post('/answers/:answerId/review', requireAuth, reviewAnswer);

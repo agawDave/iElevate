@@ -159,6 +159,50 @@ const createActivity = withUpload(async (req, res) => {
   res.status(201).json({ success: true, message: 'Activity added.', data: { id: result.insertId } });
 });
 
+// Many multiple-choice activities at once (the specialist pasted a quiz).
+// All are added, or none.
+async function createMultipleChoiceActivities(req, res) {
+  const moduleId = Number(req.body?.moduleId);
+  if (!moduleId || !await canAuthor(req.user.id, moduleId)) return res.status(403).json({ success: false, message: "You don't teach this topic." });
+  const list = Array.isArray(req.body?.questions) ? req.body.questions : [];
+  if (!list.length) return res.status(400).json({ success: false, message: 'Paste at least one question.' });
+  if (list.length > MAX_ACTIVITIES) return res.status(400).json({ success: false, message: `A topic can have up to ${MAX_ACTIVITIES} activities.` });
+  const values = [];
+  for (const [index, item] of list.entries()) {
+    const input = readActivity({ ...item, type: 'multiple_choice' });
+    if (input.error) return res.status(400).json({ success: false, message: `Question ${index + 1}: ${input.error}` });
+    values.push(input.value);
+  }
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [[count]] = await connection.query(
+      'SELECT COUNT(*) AS total, COALESCE(MAX(sort_order), 0) AS last FROM module_activities WHERE module_id = ? AND specialist_id = ?',
+      [moduleId, req.user.id]
+    );
+    const total = Number(count.total);
+    const room = MAX_ACTIVITIES - total;
+    if (values.length > room) {
+      await connection.rollback();
+      const message = room > 0
+        ? `A topic can have up to ${MAX_ACTIVITIES} activities. You have ${total}, so you can add ${room} more.`
+        : `This topic already has ${MAX_ACTIVITIES} activities, the most it can have.`;
+      return res.status(400).json({ success: false, message });
+    }
+    const rows = values.map(({ prompt, options, correct }, index) => [moduleId, req.user.id, 'multiple_choice', prompt, JSON.stringify(options), correct, Number(count.last) + 1 + index]);
+    await connection.query('INSERT INTO module_activities (module_id, specialist_id, activity_type, prompt, options, correct_option, sort_order) VALUES ?', [rows]);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  const added = values.length;
+  await logActivity({ userId: req.user.id, action: 'activity_created', moduleId, details: `${TYPE_LABELS.multiple_choice} · ${added} pasted` });
+  res.status(201).json({ success: true, message: `${added} multiple-choice activit${added === 1 ? 'y' : 'ies'} added.`, data: { added } });
+}
+
 async function findOwnActivity(req) {
   const [rows] = await pool.query('SELECT * FROM module_activities WHERE id = ? AND specialist_id = ?', [req.params.activityId, req.user.id]);
   return rows[0] || null;
@@ -631,6 +675,7 @@ module.exports = {
   notify,
   listMine,
   createActivity,
+  createMultipleChoiceActivities,
   updateActivity,
   deleteActivity,
   specialistSummary,

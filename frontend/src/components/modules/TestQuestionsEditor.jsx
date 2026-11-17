@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import axiosClient from '../../api/axiosClient';
 import { SkeletonBlock } from '../ui/Skeleton';
+import ChoiceInputs, { enterGoesTo, fillChoiceBoxes, filledChoiceCount, packChoices } from './ChoiceInputs';
 
-const EMPTY_FORM = { id: null, prompt: '', options: ['', ''], correctOption: 0 };
+const EMPTY_FORM = { id: null, prompt: '', options: fillChoiceBoxes(), correctOption: 0 };
 const letter = (index) => String.fromCharCode(65 + index);
 
 // Loads a topic's pre-test / post-test questions for the specialist.
@@ -47,40 +48,43 @@ export function TestSummaryBox({ test, onEdit }) {
   );
 }
 
-// The specialist writes the test: multiple-choice questions, one correct choice each.
-export default function TestQuestionsEditor({ moduleId, topicTitle, test, onChanged, onBack }) {
+// The specialist writes the test: multiple-choice questions, one correct choice
+// each. One at a time here, or many at once with Paste questions (onPaste).
+// Rendered with key={moduleId}, so a new topic starts it fresh.
+export default function TestQuestionsEditor({ moduleId, topicTitle, test, onChanged, onBack, onPaste, initialNotice = '' }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [formError, setFormError] = useState(''); // shown in the form, next to its buttons
+  const [notice, setNotice] = useState(initialNotice);
   const [saving, setSaving] = useState(false);
+  const promptBox = useRef(null);
+  const firstChoice = useRef(null);
   const questions = test?.questions || [];
   const takenBy = test ? test.taken.pre : 0;
 
-  useEffect(() => { setForm(EMPTY_FORM); setError(''); setNotice(''); }, [moduleId]);
-
   const update = (changes) => setForm((previous) => ({ ...previous, ...changes }));
-  const setOption = (index, value) => update({ options: form.options.map((option, i) => (i === index ? value : option)) });
-  function removeOption(index) {
-    const options = form.options.filter((_, i) => i !== index);
-    const correctOption = form.correctOption === index ? 0 : form.correctOption > index ? form.correctOption - 1 : form.correctOption;
-    update({ options, correctOption });
-  }
 
   async function save(event) {
     event.preventDefault();
+    if (saving) return;
+    if (!form.prompt.trim()) { setFormError('Write the question first.'); return; }
+    const choices = packChoices(form.options, form.correctOption);
+    if (choices.error) { setFormError(choices.error); return; }
     setSaving(true);
     setError('');
+    setFormError('');
     setNotice('');
-    const body = { moduleId, prompt: form.prompt, options: form.options, correctOption: form.correctOption };
+    const body = { moduleId, prompt: form.prompt, ...choices };
     try {
       const response = form.id
         ? await axiosClient.put(`/elevate/tests/${form.id}`, body)
         : await axiosClient.post('/elevate/tests', body);
-      setNotice(response.data.message);
+      setNotice(form.id ? response.data.message : 'Question added. Type the next one.');
       setForm(EMPTY_FORM);
       await onChanged();
+      promptBox.current?.focus();
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Could not save the question.');
+      setFormError(requestError.response?.data?.message || 'Could not save the question.');
     } finally {
       setSaving(false);
     }
@@ -115,13 +119,23 @@ export default function TestQuestionsEditor({ moduleId, topicTitle, test, onChan
       {notice && <p role="status" className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{notice}</p>}
       {error && <p role="alert" className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
+      {onPaste && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-brand-200 bg-brand-50/50 px-4 py-3">
+          <div className="min-w-0 flex-1 basis-60">
+            <p className="text-sm font-semibold text-slate-900">Have your questions in Word or Google Docs?</p>
+            <p className="text-xs text-slate-600">Paste them all at once instead of typing them one by one.</p>
+          </div>
+          <button type="button" onClick={onPaste} className="shrink-0 rounded-lg border border-brand-600 bg-white px-3 py-1.5 text-sm font-semibold text-brand-700 hover:bg-brand-50">Paste questions</button>
+        </div>
+      )}
+
       <ol className="mb-6 space-y-3">
         {questions.map((question, index) => (
           <li key={question.id} className={`rounded-xl border p-4 ${form.id === question.id ? 'border-brand-400 ring-2 ring-brand-100' : 'border-stone-200'}`}>
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm font-medium text-slate-900"><span className="text-slate-500">{index + 1}.</span> {question.prompt}</p>
               <div className="flex shrink-0 gap-1">
-                <button type="button" onClick={() => setForm({ id: question.id, prompt: question.prompt, options: question.options, correctOption: question.correctOption })} className="rounded px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50">Edit</button>
+                <button type="button" onClick={() => { setForm({ id: question.id, prompt: question.prompt, options: fillChoiceBoxes(question.options), correctOption: question.correctOption }); setFormError(''); promptBox.current?.focus(); }} className="rounded px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50">Edit</button>
                 <button type="button" onClick={() => remove(question)} className="rounded px-2 py-1 text-xs font-medium text-slate-500 hover:bg-red-50 hover:text-red-600">Remove</button>
               </div>
             </div>
@@ -134,37 +148,24 @@ export default function TestQuestionsEditor({ moduleId, topicTitle, test, onChan
             </ul>
           </li>
         ))}
-        {!questions.length && <li className="rounded-xl border border-dashed border-stone-300 p-4 text-sm text-slate-500">No questions yet. Add the first one below. Five to ten questions is a good test.</li>}
+        {!questions.length && <li className="rounded-xl border border-dashed border-stone-300 p-4 text-sm text-slate-500">No questions yet. Paste them, or add the first one below. Five to ten questions is a good test.</li>}
       </ol>
 
       <form onSubmit={save} className="rounded-xl border border-stone-200 bg-stone-50 p-4">
         <p className="mb-3 font-semibold text-slate-900">{form.id ? 'Edit question' : 'Add a question'}</p>
         <label className="block text-sm font-medium text-slate-700">
           Question
-          <textarea value={form.prompt} onChange={(event) => update({ prompt: event.target.value })} rows={2} maxLength={1000} placeholder="e.g. Where do you change the look of a WordPress site?" className={input} />
+          <textarea ref={promptBox} value={form.prompt} onChange={(event) => update({ prompt: event.target.value })} onKeyDown={enterGoesTo(firstChoice)} rows={2} maxLength={1000} placeholder="e.g. Where do you change the look of a WordPress site?" className={input} />
         </label>
-        <fieldset className="mt-3">
-          <legend className="text-sm font-medium text-slate-700">Choices <span className="font-normal text-slate-500">(mark the correct one)</span></legend>
-          <div className="mt-1 space-y-2">
-            {form.options.map((option, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <input type="radio" name="test-correct-option" checked={form.correctOption === index} onChange={() => update({ correctOption: index })} aria-label={`Choice ${letter(index)} is correct`} className="h-4 w-4 accent-emerald-600" />
-                <input value={option} onChange={(event) => setOption(index, event.target.value)} maxLength={190} placeholder={`Choice ${letter(index)}`} className="block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
-                {form.options.length > 2 && (
-                  <button type="button" onClick={() => removeOption(index)} aria-label={`Remove choice ${letter(index)}`} className="px-1 text-lg leading-none text-slate-400 hover:text-red-600">×</button>
-                )}
-              </div>
-            ))}
-          </div>
-          {form.options.length < 4 && (
-            <button type="button" onClick={() => update({ options: [...form.options, ''] })} className="mt-2 text-sm font-medium text-brand-600 hover:underline">+ Add a choice</button>
-          )}
-        </fieldset>
+        <div className="mt-3">
+          <ChoiceInputs name="test-correct-option" options={form.options} correctOption={form.correctOption} onChange={update} firstRef={firstChoice} />
+        </div>
+        {formError && <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{formError}</p>}
         <div className="mt-4 flex gap-2">
-          <button type="submit" disabled={saving || !form.prompt.trim() || form.options.some((option) => !option.trim())} className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-semibold text-brand-900 hover:bg-accent-550 disabled:opacity-40">
+          <button type="submit" disabled={saving || !form.prompt.trim() || filledChoiceCount(form.options) < 2} className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-semibold text-brand-900 hover:bg-accent-550 disabled:opacity-40">
             {saving ? 'Saving…' : form.id ? 'Save changes' : 'Add question'}
           </button>
-          {form.id && <button type="button" onClick={() => setForm(EMPTY_FORM)} className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm text-slate-600 hover:bg-stone-50">Cancel</button>}
+          {form.id && <button type="button" onClick={() => { setForm(EMPTY_FORM); setFormError(''); }} className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm text-slate-600 hover:bg-stone-50">Cancel</button>}
         </div>
       </form>
     </div>

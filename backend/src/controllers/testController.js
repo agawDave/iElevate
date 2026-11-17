@@ -65,6 +65,48 @@ async function createQuestion(req, res) {
   res.status(201).json({ success: true, message: 'Question added.', data: { id: result.insertId } });
 }
 
+// Many questions at once (the specialist pasted a quiz). All are added, or none.
+async function createQuestions(req, res) {
+  const moduleId = Number(req.body?.moduleId);
+  if (!moduleId || !await canAuthor(req.user.id, moduleId)) return res.status(403).json({ success: false, message: "You don't teach this topic." });
+  const list = Array.isArray(req.body?.questions) ? req.body.questions : [];
+  if (!list.length) return res.status(400).json({ success: false, message: 'Paste at least one question.' });
+  if (list.length > MAX_QUESTIONS) return res.status(400).json({ success: false, message: `A test can have up to ${MAX_QUESTIONS} questions.` });
+  const values = [];
+  for (const [index, item] of list.entries()) {
+    const input = readQuestion(item);
+    if (input.error) return res.status(400).json({ success: false, message: `Question ${index + 1}: ${input.error}` });
+    values.push(input.value);
+  }
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [[count]] = await connection.query(
+      'SELECT COUNT(*) AS total, COALESCE(MAX(sort_order), 0) AS last FROM module_test_questions WHERE module_id = ? AND specialist_id = ?',
+      [moduleId, req.user.id]
+    );
+    const total = Number(count.total);
+    const room = MAX_QUESTIONS - total;
+    if (values.length > room) {
+      await connection.rollback();
+      const message = room > 0
+        ? `A test can have up to ${MAX_QUESTIONS} questions. You have ${total}, so you can add ${room} more.`
+        : `Your test already has ${MAX_QUESTIONS} questions, the most it can have.`;
+      return res.status(400).json({ success: false, message });
+    }
+    const rows = values.map(({ prompt, options, correct }, index) => [moduleId, req.user.id, prompt, JSON.stringify(options), correct, Number(count.last) + 1 + index]);
+    await connection.query('INSERT INTO module_test_questions (module_id, specialist_id, prompt, options, correct_option, sort_order) VALUES ?', [rows]);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  const added = values.length;
+  res.status(201).json({ success: true, message: `${added} question${added === 1 ? '' : 's'} added.`, data: { added } });
+}
+
 async function findOwnQuestion(req) {
   const [rows] = await pool.query('SELECT * FROM module_test_questions WHERE id = ? AND specialist_id = ?', [req.params.questionId, req.user.id]);
   return rows[0] || null;
@@ -147,4 +189,4 @@ async function takeTest(req, res) {
   });
 }
 
-module.exports = { listQuestions, createQuestion, updateQuestion, deleteQuestion, takeTest };
+module.exports = { listQuestions, createQuestion, createQuestions, updateQuestion, deleteQuestion, takeTest };

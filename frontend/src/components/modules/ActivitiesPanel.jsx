@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axiosClient from '../../api/axiosClient';
 import { DetailPanel } from '../admin/Directory';
 import { ActivityFileLink, FilePicker } from './ActivityFiles';
 import TestQuestionsEditor, { TestSummaryBox, useTestQuestions } from './TestQuestionsEditor';
+import PasteQuestions from './PasteQuestions';
+import ChoiceInputs, { enterGoesTo, fillChoiceBoxes, filledChoiceCount, packChoices } from './ChoiceInputs';
 import { ACTIVITY_FILE_HINT } from '../../lib/activityFiles';
 import { SkeletonLines } from '../ui/Skeleton';
 
 // file: a new file to upload; currentFile: the file a file task already has.
-const EMPTY_FORM = { id: null, type: 'multiple_choice', prompt: '', options: ['', ''], correctOption: 0, file: null, currentFile: null };
+const EMPTY_FORM = { id: null, type: 'multiple_choice', prompt: '', options: fillChoiceBoxes(), correctOption: 0, file: null, currentFile: null };
 const TYPE_LABELS = { multiple_choice: 'Multiple choice', written: 'Written task', file: 'File task' };
 const PROMPT_LABELS = { multiple_choice: 'Question', written: 'Task', file: 'Instructions' };
 const PLACEHOLDERS = {
@@ -15,21 +17,44 @@ const PLACEHOLDERS = {
   written: 'e.g. Make a page called “About us” and describe what you put on it.',
   file: 'e.g. Download the worksheet, fill in your weekly budget, and send it back.',
 };
+const MAX_TEST_QUESTIONS = 30;
+const MAX_ACTIVITIES = 50;
 
-// A specialist writes the activities their learners answer for a topic.
-export default function ActivitiesPanel({ topicId, topics = [], onClose, onChanged }) {
+// A specialist writes the activities their learners answer for a topic, and the
+// pre/post-test. Three screens: the activities, the test, and Paste questions
+// (many multiple-choice questions at once, for either). start = 'test' opens
+// straight on the test.
+export default function ActivitiesPanel({ topicId, topics = [], onClose, onChanged, start = 'activities' }) {
   const [currentId, setCurrentId] = useState(topicId);
   const [activities, setActivities] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState('');
+  const [formError, setFormError] = useState(''); // shown in the form, next to its buttons
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
-  const [showTest, setShowTest] = useState(false);
+  const [screen, setScreen] = useState(start); // 'activities' | 'test' | 'paste'
+  const [pasteFrom, setPasteFrom] = useState('activities');
+  const [pasteTarget, setPasteTarget] = useState('activities');
+  const [pasteText, setPasteText] = useState('');
+  const [testNotice, setTestNotice] = useState('');
+  const top = useRef(null);
+  const shownTopic = useRef(topicId);
+  const promptBox = useRef(null);
+  const firstChoice = useRef(null);
   const { test, reload: reloadTest } = useTestQuestions(currentId);
   const topicTitle = topics.find((topic) => String(topic.id) === String(currentId))?.title || 'this topic';
 
   useEffect(() => { setCurrentId(topicId); }, [topicId]);
-  useEffect(() => { setShowTest(false); }, [currentId]);
+  // Another topic: back to its activities, with an empty paste box.
+  useEffect(() => {
+    if (String(shownTopic.current) === String(currentId)) return;
+    shownTopic.current = currentId;
+    setScreen('activities');
+    setPasteText('');
+    setTestNotice('');
+  }, [currentId]);
+  // Each screen starts at the top of the panel.
+  useEffect(() => { top.current?.scrollIntoView({ block: 'start' }); }, [screen]);
 
   const load = useCallback(async () => {
     if (!currentId) return;
@@ -45,27 +70,66 @@ export default function ActivitiesPanel({ topicId, topics = [], onClose, onChang
     setActivities(null);
     setForm(EMPTY_FORM);
     setError('');
+    setFormError('');
     setNotice('');
     load();
   }, [load]);
 
-  const update = (changes) => setForm((previous) => ({ ...previous, ...changes }));
-  const setOption = (index, value) => update({ options: form.options.map((option, i) => (i === index ? value : option)) });
-  function removeOption(index) {
-    const options = form.options.filter((_, i) => i !== index);
-    const correctOption = form.correctOption === index ? 0 : form.correctOption > index ? form.correctOption - 1 : form.correctOption;
-    update({ options, correctOption });
+  const savedPrompts = useMemo(() => ({
+    test: (test?.questions || []).map((question) => question.prompt),
+    activities: (activities || []).filter((activity) => activity.type === 'multiple_choice').map((activity) => activity.prompt),
+  }), [test, activities]);
+  const room = {
+    test: MAX_TEST_QUESTIONS - (test?.questions.length || 0),
+    activities: MAX_ACTIVITIES - (activities?.length || 0),
+  };
+
+  function openPaste(from) {
+    setPasteFrom(from);
+    setPasteTarget(from === 'test' ? 'test' : 'activities');
+    setNotice('');
+    setScreen('paste');
   }
+
+  function openTest() {
+    setTestNotice('');
+    setScreen('test');
+  }
+
+  async function pasted({ target, added, left }) {
+    const stillThere = left ? ` ${left === 1 ? 'The one that needs a fix is' : `The ${left} that need a fix are`} still in the paste box.` : '';
+    if (target === 'test') {
+      await reloadTest();
+      setTestNotice(`${added} question${added === 1 ? '' : 's'} added to your pre/post-test.${stillThere}`);
+      setScreen('test');
+    } else {
+      await load();
+      setError('');
+      setNotice(`${added} multiple-choice activit${added === 1 ? 'y' : 'ies'} added.${stillThere}`);
+      setScreen('activities');
+    }
+    onChanged?.();
+  }
+
+  const update = (changes) => setForm((previous) => ({ ...previous, ...changes }));
 
   async function save(event) {
     event.preventDefault();
+    if (saving) return;
+    if (!form.prompt.trim()) { setFormError(form.type === 'file' ? 'Write the instructions for the file.' : 'Write the question or task first.'); return; }
+    let choices = {};
+    if (form.type === 'multiple_choice') {
+      choices = packChoices(form.options, form.correctOption);
+      if (choices.error) { setFormError(choices.error); return; }
+    }
     const editing = activities.find((activity) => activity.id === form.id);
     if (editing && editing.type !== form.type && editing.answers > 0
       && !window.confirm(`Changing the kind of activity deletes the ${editing.answers} answer${editing.answers === 1 ? '' : 's'} learners already gave. Continue?`)) return;
     setSaving(true);
     setError('');
+    setFormError('');
     setNotice('');
-    let body = { moduleId: currentId, type: form.type, prompt: form.prompt, options: form.options, correctOption: form.correctOption };
+    let body = { moduleId: currentId, type: form.type, prompt: form.prompt, ...choices };
     if (form.type === 'file') {
       // A form with the file; without a new file, an edit keeps the current one.
       body = new FormData();
@@ -82,8 +146,10 @@ export default function ActivitiesPanel({ topicId, topics = [], onClose, onChang
       setForm(EMPTY_FORM);
       await load();
       onChanged?.();
+      // Ready for the next one.
+      if (!form.id) promptBox.current?.focus();
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Could not save the activity.');
+      setFormError(requestError.response?.data?.message || 'Could not save the activity.');
     } finally {
       setSaving(false);
     }
@@ -105,9 +171,11 @@ export default function ActivitiesPanel({ topicId, topics = [], onClose, onChang
   }
 
   const input = 'mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200';
+  const multipleChoice = form.type === 'multiple_choice';
   return (
     <DetailPanel open={Boolean(topicId)} title={`Tests & activities · ${topicTitle}`} onClose={onClose}>
-      {topics.length > 1 && (
+      <div ref={top} className="scroll-mt-4" />
+      {topics.length > 1 && screen !== 'paste' && (
         <label className="mb-4 block text-sm font-medium text-slate-700">
           Topic
           <select value={currentId || ''} onChange={(event) => setCurrentId(event.target.value)} className={input}>
@@ -115,17 +183,36 @@ export default function ActivitiesPanel({ topicId, topics = [], onClose, onChang
           </select>
         </label>
       )}
-      {showTest ? (
+      {screen === 'paste' && (
+        <PasteQuestions
+          moduleId={currentId}
+          target={pasteTarget}
+          onTargetChange={setPasteTarget}
+          text={pasteText}
+          onTextChange={setPasteText}
+          savedPrompts={savedPrompts}
+          room={room}
+          takenBy={test ? test.taken.pre : 0}
+          backLabel={pasteFrom === 'test' ? 'Back to questions' : 'Back to activities'}
+          onBack={() => setScreen(pasteFrom)}
+          onAdded={pasted}
+        />
+      )}
+      {screen === 'test' && (
         <TestQuestionsEditor
+          key={currentId}
           moduleId={currentId}
           topicTitle={topicTitle}
           test={test}
+          initialNotice={testNotice}
           onChanged={async () => { await reloadTest(); onChanged?.(); }}
-          onBack={() => setShowTest(false)}
+          onBack={() => setScreen('activities')}
+          onPaste={() => openPaste('test')}
         />
-      ) : (
+      )}
+      {screen === 'activities' && (
       <>
-      <TestSummaryBox test={test} onEdit={() => setShowTest(true)} />
+      <TestSummaryBox test={test} onEdit={openTest} />
       <p className="mb-4 text-sm text-slate-600">
         Your learners in {topicTitle} answer these on their module page, in this order. Multiple-choice answers are checked automatically. For a file task, learners download your file (a worksheet you made in Word, a PDF…) and send back their file, a photo of their answer, or a typed answer. You read written and file answers and reply.
       </p>
@@ -141,7 +228,7 @@ export default function ActivitiesPanel({ topicId, topics = [], onClose, onChang
                   {index + 1}. {TYPE_LABELS[activity.type]}{activity.answers ? ` · ${activity.answers} answered` : ''}
                 </p>
                 <div className="flex shrink-0 gap-1">
-                  <button type="button" onClick={() => setForm({ ...EMPTY_FORM, id: activity.id, type: activity.type, prompt: activity.prompt, options: activity.options.length ? activity.options : ['', ''], correctOption: activity.correctOption ?? 0, currentFile: activity.file })} className="rounded px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50">Edit</button>
+                  <button type="button" onClick={() => { setForm({ ...EMPTY_FORM, id: activity.id, type: activity.type, prompt: activity.prompt, options: fillChoiceBoxes(activity.options), correctOption: activity.correctOption ?? 0, currentFile: activity.file }); setFormError(''); }} className="rounded px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50">Edit</button>
                   <button type="button" onClick={() => remove(activity)} className="rounded px-2 py-1 text-xs font-medium text-slate-500 hover:bg-red-50 hover:text-red-600">Remove</button>
                 </div>
               </div>
@@ -163,7 +250,14 @@ export default function ActivitiesPanel({ topicId, topics = [], onClose, onChang
       )}
 
       <form onSubmit={save} className="rounded-xl border border-stone-200 bg-stone-50 p-4">
-        <p className="mb-3 font-semibold text-slate-900">{form.id ? 'Edit activity' : 'Add an activity'}</p>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="font-semibold text-slate-900">{form.id ? 'Edit activity' : 'Add an activity'}</p>
+          {!form.id && (
+            <button type="button" onClick={() => openPaste('activities')} className="rounded-lg border border-brand-600 bg-white px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50">
+              Paste many questions
+            </button>
+          )}
+        </div>
         <div className="mb-3 flex gap-2" role="radiogroup" aria-label="Kind of activity">
           {Object.entries(TYPE_LABELS).map(([value, label]) => (
             <button
@@ -181,8 +275,10 @@ export default function ActivitiesPanel({ topicId, topics = [], onClose, onChang
         <label className="block text-sm font-medium text-slate-700">
           {PROMPT_LABELS[form.type]}
           <textarea
+            ref={promptBox}
             value={form.prompt}
             onChange={(event) => update({ prompt: event.target.value })}
+            onKeyDown={multipleChoice ? enterGoesTo(firstChoice) : undefined}
             rows={3}
             maxLength={1000}
             placeholder={PLACEHOLDERS[form.type]}
@@ -207,43 +303,21 @@ export default function ActivitiesPanel({ topicId, topics = [], onClose, onChang
             </div>
           </div>
         )}
-        {form.type === 'multiple_choice' && (
-          <fieldset className="mt-3">
-            <legend className="text-sm font-medium text-slate-700">Choices <span className="font-normal text-slate-500">(mark the correct one)</span></legend>
-            <div className="mt-1 space-y-2">
-              {form.options.map((option, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="correct-option"
-                    checked={form.correctOption === index}
-                    onChange={() => update({ correctOption: index })}
-                    aria-label={`Choice ${String.fromCharCode(65 + index)} is correct`}
-                    className="h-4 w-4 accent-emerald-600"
-                  />
-                  <input
-                    value={option}
-                    onChange={(event) => setOption(index, event.target.value)}
-                    maxLength={190}
-                    placeholder={`Choice ${String.fromCharCode(65 + index)}`}
-                    className="block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
-                  />
-                  {form.options.length > 2 && (
-                    <button type="button" onClick={() => removeOption(index)} aria-label={`Remove choice ${String.fromCharCode(65 + index)}`} className="px-1 text-lg leading-none text-slate-400 hover:text-red-600">×</button>
-                  )}
-                </div>
-              ))}
-            </div>
-            {form.options.length < 4 && (
-              <button type="button" onClick={() => update({ options: [...form.options, ''] })} className="mt-2 text-sm font-medium text-brand-600 hover:underline">+ Add a choice</button>
-            )}
-          </fieldset>
+        {multipleChoice && (
+          <div className="mt-3">
+            <ChoiceInputs name="correct-option" options={form.options} correctOption={form.correctOption} onChange={update} firstRef={firstChoice} />
+          </div>
         )}
+{formError && <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{formError}</p>}
         <div className="mt-4 flex gap-2">
-          <button type="submit" disabled={saving || !form.prompt.trim() || (form.type === 'file' && !form.file && !form.currentFile)} className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-semibold text-brand-900 hover:bg-accent-550 disabled:opacity-40">
+          <button
+            type="submit"
+            disabled={saving || !form.prompt.trim() || (form.type === 'file' && !form.file && !form.currentFile) || (multipleChoice && filledChoiceCount(form.options) < 2)}
+            className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-semibold text-brand-900 hover:bg-accent-550 disabled:opacity-40"
+          >
             {saving ? 'Saving…' : form.id ? 'Save changes' : 'Add activity'}
           </button>
-          {form.id && <button type="button" onClick={() => setForm(EMPTY_FORM)} className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm text-slate-600 hover:bg-stone-50">Cancel</button>}
+          {form.id && <button type="button" onClick={() => { setForm(EMPTY_FORM); setFormError(''); }} className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm text-slate-600 hover:bg-stone-50">Cancel</button>}
         </div>
       </form>
       </>
