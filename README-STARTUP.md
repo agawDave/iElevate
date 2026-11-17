@@ -101,6 +101,10 @@ The whole database is built by one file, `backend/database/setup_fresh_database.
 (every table, the ELEVATE topics and skills, the official materials; no accounts).
 Import it in phpMyAdmin, as described in "Getting started" in `README.md`.
 
+To read the database one table at a time, open `backend/database/tables/` (one file
+per table, each starting with what the table holds) and `backend/database/data/` (the
+ELEVATE reference data). The setup file is all of them together, so import only that one.
+
 - **Specialists:** each signs up and chooses **Specialist**, picks their topics on
   **My Teaching Plan**, then creates a module for each topic on **Modules** for the
   admin to approve.
@@ -109,8 +113,9 @@ Import it in phpMyAdmin, as described in "Getting started" in `README.md`.
 - **Changing the database** (a new table or column): make the change in your local
   `ielevate_db`, then run
   `powershell -ExecutionPolicy Bypass -File backend\database\export_setup_sql.ps1`
-  so the setup file includes it. The script copies structure and ELEVATE reference
-  data only, never accounts.
+  so the setup file and the `tables/` and `data/` folders include it. A new table
+  also needs a one-line description in the script's `$about` list (it warns you).
+  The script copies structure and ELEVATE reference data only, never accounts.
 
 Topic modules link to these protected files in `backend/module-resources/`:
 
