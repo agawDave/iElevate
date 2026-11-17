@@ -14,7 +14,7 @@ async function learnerDashboard(req, res) {
   if (user.user_type !== 'beneficiary') return res.status(403).json({ success: false, message: 'No dashboard for this account.' });
 
   const q = async (sql, params) => (await pool.query(sql, params))[0];
-  const [assignments, activityCounts, questionCounts, attempts, feedback, sessions, phaseRows] = await Promise.all([
+  const [assignments, activityCounts, questionCounts, attempts, feedback, sessions] = await Promise.all([
     // Topics they applied to (pending) or were accepted for (assigned), and topics they can apply to.
     q(`SELECT a.module_id, a.assignment_status, a.applied_at, a.assigned_at, a.specialist_id,
               lm.slug, lm.title, lm.phase, lm.hours, lm.sort_order, s.full_name AS specialist_name,
@@ -62,12 +62,6 @@ async function learnerDashboard(req, res) {
        WHERE ms.beneficiary_id = ? AND ms.status IN ('pending', 'confirmed') AND ms.ends_at > NOW()
        ORDER BY ms.starts_at
        LIMIT 3`, [me]),
-    // The program's phases, in curriculum order.
-    q(`SELECT phase, MIN(sort_order) AS first_topic
-       FROM learning_modules
-       WHERE is_elevate_program = 1 AND approval_status = 'approved'
-       GROUP BY phase
-       ORDER BY first_topic`, []),
   ]);
 
   const activityBy = new Map(activityCounts.map((row) => [Number(row.module_id), { done: Number(row.done) || 0, total: Number(row.total) || 0 }]));
@@ -121,34 +115,11 @@ async function learnerDashboard(req, res) {
     needsMyAnswer: row.status === 'pending' && Number(row.scheduled_by) !== Number(me),
   }));
 
-  // Their path through the program, one step per phase: done (all their topics
-  // in it finished), skipped (their skill check found nothing they need there),
-  // now (the first phase with topics still to finish), or next.
-  const PLAN = ['suggested', 'queued', 'waiting', 'pending', 'assigned'];
-  let foundNow = false;
-  const journey = phaseRows.map((row) => {
-    const mine = assignments.filter((item) => item.phase === row.phase && PLAN.includes(item.assignment_status));
-    const done = mine.filter((item) => item.certificate_id).length;
-    let state = 'next';
-    if (!mine.length) state = 'skipped';
-    else if (done === mine.length) state = 'done';
-    else if (!foundNow) { state = 'now'; foundNow = true; }
-    return {
-      phase: row.phase,
-      state,
-      topics: mine.map((item) => item.title),
-      total: mine.length,
-      completed: done,
-      started: mine.filter((item) => ['pending', 'assigned'].includes(item.assignment_status) && !item.certificate_id).length,
-    };
-  });
-
   const learning = topics.filter((topic) => topic.stage === 'learning');
   const completed = topics.filter((topic) => topic.stage === 'completed');
   res.json({
     success: true,
     data: {
-      journey,
       summary: {
         learning: learning.length,
         completed: completed.length,

@@ -1,6 +1,5 @@
 // Each ELEVATE topic's "face": an icon, on its phase's shade of navy, and a
-// short name for each phase (shown on the journey, the phase headings and the
-// topic bands).
+// short name for each phase (shown on the phase headings and the topic bands).
 
 export const PHASES = {
   1: { name: 'Computer & online basics', gradient: 'bg-gradient-to-br from-brand-500 to-brand-400' },

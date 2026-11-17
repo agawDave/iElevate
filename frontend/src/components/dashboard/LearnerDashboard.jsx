@@ -6,11 +6,9 @@ import LineIcon from '../ui/LineIcon';
 import { DashboardSkeleton } from '../ui/Skeleton';
 import EmptyState from '../ui/EmptyState';
 import { TopicTile } from '../ui/TopicFace';
-import ElevateJourney from './ElevateJourney';
 
-// The beneficiary's dashboard: a navy banner with their next step, their
-// numbers, their topics with progress, upcoming sessions, and the latest
-// replies from specialists.
+// The beneficiary's dashboard: a navy banner, their numbers, their topics with
+// progress, upcoming sessions, and the latest replies from specialists.
 
 const TILES = [
   { key: 'learning', label: 'Topics in progress', icon: 'progress', style: 'bg-brand-50 text-brand-600', to: '/modules?tab=ongoing' },
@@ -96,7 +94,6 @@ export default function LearnerDashboard({ greeting, firstName }) {
 
       {data && (
         <>
-          <ElevateJourney journey={data.journey} />
           <StatTiles tiles={TILES} values={data.summary} />
 
           <div className="grid gap-5 lg:grid-cols-5 lg:items-start">
