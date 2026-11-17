@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import axiosClient from '../../api/axiosClient';
 import { SkeletonBlock } from '../ui/Skeleton';
+import { useConfirm } from '../../context/ConfirmContext';
 import ChoiceInputs, { enterGoesTo, fillChoiceBoxes, filledChoiceCount, packChoices } from './ChoiceInputs';
 
 const EMPTY_FORM = { id: null, prompt: '', options: fillChoiceBoxes(), correctOption: 0 };
@@ -52,6 +53,7 @@ export function TestSummaryBox({ test, onEdit }) {
 // each. One at a time here, or many at once with Paste questions (onPaste).
 // Rendered with key={moduleId}, so a new topic starts it fresh.
 export default function TestQuestionsEditor({ moduleId, topicTitle, test, onChanged, onBack, onPaste, initialNotice = '' }) {
+  const confirm = useConfirm();
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState('');
   const [formError, setFormError] = useState(''); // shown in the form, next to its buttons
@@ -91,7 +93,7 @@ export default function TestQuestionsEditor({ moduleId, topicTitle, test, onChan
   }
 
   async function remove(question) {
-    if (!window.confirm('Remove this question from the test?')) return;
+    if (!await confirm({ title: 'Remove this question?', message: 'It comes out of the pre-test and the post-test.', confirmLabel: 'Remove', danger: true })) return;
     setError('');
     try {
       const response = await axiosClient.delete(`/elevate/tests/${question.id}`);

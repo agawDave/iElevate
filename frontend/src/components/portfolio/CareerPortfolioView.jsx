@@ -4,6 +4,7 @@ import axiosClient from '../../api/axiosClient';
 import { ActivityFileLink, FilePicker } from '../modules/ActivityFiles';
 import { RubricSummary } from '../modules/Rubric';
 import { BAND_LABELS, EDUCATION_LABELS } from '../../lib/profileLabels';
+import { useConfirm } from '../../context/ConfirmContext';
 import { AddButton, Avatar, CertificateActions, ItemCard, ItemForm, itemAddLabel, longDate, useItemEditor } from './PortfolioView';
 
 const UPLOADED_LABEL = 'Uploaded by the beneficiary';
@@ -121,6 +122,7 @@ function EntryForm({ kind, entry, onDone, onCancel }) {
 }
 
 function Entries({ kind, entries, own, onChanged }) {
+  const confirm = useConfirm();
   const copy = ENTRY_COPY[kind];
   const [editing, setEditing] = useState(null); // 'new' or an entry
   const [error, setError] = useState('');
@@ -129,7 +131,7 @@ function Entries({ kind, entries, own, onChanged }) {
     await onChanged();
   }
   async function remove(entry) {
-    if (!window.confirm(`Remove "${entry.title}"?`)) return;
+    if (!await confirm({ title: 'Remove this from your portfolio?', message: `"${entry.title}" will no longer show in your career portfolio.`, confirmLabel: 'Remove', danger: true })) return;
     setError('');
     try {
       await axiosClient.delete(`/elevate/portfolio/career/entries/${entry.id}`);
@@ -171,6 +173,7 @@ function Entries({ kind, entries, own, onChanged }) {
 }
 
 function ResumeSection({ data, own, onChanged }) {
+  const confirm = useConfirm();
   const { career, person } = data;
   const { profile } = career;
   const [view, setView] = useState(profile.resumeMode);
@@ -206,8 +209,8 @@ function ResumeSection({ data, own, onChanged }) {
     run(() => axiosClient.put('/elevate/portfolio/career/resume', form), 'Could not upload your resume.');
   }
 
-  function removeFile() {
-    if (!window.confirm('Remove your uploaded resume?')) return;
+  async function removeFile() {
+    if (!await confirm({ title: 'Remove your uploaded resume?', message: 'The file is deleted. You can upload another one any time.', confirmLabel: 'Remove', danger: true })) return;
     setView('built');
     run(() => axiosClient.delete('/elevate/portfolio/career/resume'), 'Could not remove your resume.');
   }
@@ -330,6 +333,7 @@ function AskForm({ topics, onChanged }) {
 }
 
 function Recommendations({ data, own, onChanged, letters, editor }) {
+  const confirm = useConfirm();
   const { career, topics } = data;
   const [error, setError] = useState('');
   const written = career.recommendations.filter((item) => item.status === 'written');
@@ -337,7 +341,7 @@ function Recommendations({ data, own, onChanged, letters, editor }) {
   const askable = topics.filter((topic) => topic.acceptedAt && topic.specialist && !career.recommendations.some((item) => item.moduleId === topic.moduleId));
 
   async function remove(item, question) {
-    if (!window.confirm(question)) return;
+    if (!await confirm({ danger: true, ...question })) return;
     setError('');
     try {
       await axiosClient.delete(`/elevate/portfolio/recommendations/${item.id}`);
@@ -357,7 +361,7 @@ function Recommendations({ data, own, onChanged, letters, editor }) {
             <li key={item.id} className="rounded-xl border border-stone-200 p-4 print:break-inside-avoid">
               <div className="flex items-start justify-between gap-3">
                 <p className="min-w-0 whitespace-pre-line text-sm italic text-slate-800">&ldquo;{item.body}&rdquo;</p>
-                {own && <button type="button" onClick={() => remove(item, 'Remove this recommendation from your portfolio?')} className="shrink-0 rounded px-2 py-1 text-xs font-medium text-slate-500 hover:bg-red-50 hover:text-red-600 print:hidden">Remove</button>}
+                {own && <button type="button" onClick={() => remove(item, { title: 'Remove this recommendation?', message: `${item.specialist}'s recommendation will no longer show in your portfolio.`, confirmLabel: 'Remove' })} className="shrink-0 rounded px-2 py-1 text-xs font-medium text-slate-500 hover:bg-red-50 hover:text-red-600 print:hidden">Remove</button>}
               </div>
               <p className="mt-2 text-sm font-semibold text-slate-900">{item.specialist}</p>
               <p className="text-xs text-slate-500">Specialist, {item.topic} · Written on iELEVATE · {longDate(item.writtenAt)}</p>
@@ -371,7 +375,9 @@ function Recommendations({ data, own, onChanged, letters, editor }) {
           {open.map((item) => (
             <li key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-stone-300 px-3 py-2 text-sm text-slate-600">
               <span className="min-w-0">{item.status === 'requested' ? `Waiting for ${item.specialist} to write it · ${item.topic}` : `${item.specialist} couldn't write one right now · ${item.topic}`}</span>
-              <button type="button" onClick={() => remove(item, item.status === 'requested' ? 'Cancel this request?' : 'Clear this?')} className="shrink-0 rounded px-2 py-1 text-xs font-medium text-slate-500 hover:bg-red-50 hover:text-red-600">{item.status === 'requested' ? 'Cancel' : 'Clear'}</button>
+              <button type="button" onClick={() => remove(item, item.status === 'requested'
+                ? { title: 'Cancel this request?', message: `${item.specialist} won't be asked for a recommendation for ${item.topic} any more.`, confirmLabel: 'Cancel request', cancelLabel: 'Keep it' }
+                : { title: 'Clear this?', message: `The note that ${item.specialist} couldn't write one is removed from your list.`, confirmLabel: 'Clear' })} className="shrink-0 rounded px-2 py-1 text-xs font-medium text-slate-500 hover:bg-red-50 hover:text-red-600">{item.status === 'requested' ? 'Cancel' : 'Clear'}</button>
             </li>
           ))}
         </ul>

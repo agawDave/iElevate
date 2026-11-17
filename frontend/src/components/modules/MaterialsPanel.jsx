@@ -5,10 +5,12 @@ import MaterialsList from './MaterialsList';
 import SpecialistMaterialsForm from './SpecialistMaterialsForm';
 import { withFileLinks } from '../../lib/moduleFiles';
 import { SkeletonLines } from '../ui/Skeleton';
+import { useConfirm } from '../../context/ConfirmContext';
 
 // A topic's materials in a panel over the Modules page. Specialists can also
 // add and remove their own materials, and switch between topics they teach.
 export default function MaterialsPanel({ topicId, topics = [], onClose }) {
+  const confirm = useConfirm();
   const [currentId, setCurrentId] = useState(topicId);
   const [module, setModule] = useState(null);
   const [error, setError] = useState('');
@@ -39,7 +41,7 @@ export default function MaterialsPanel({ topicId, topics = [], onClose }) {
   }, [load]);
 
   async function removeMaterial(resource) {
-    if (!window.confirm(`Remove “${resource.title}” for your learners?`)) return;
+    if (!await confirm({ title: 'Remove this material?', message: `“${resource.title}” will no longer be available to your learners.`, confirmLabel: 'Remove', danger: true })) return;
     setRemoveError('');
     try {
       await axiosClient.delete(`/modules/${module.id}/resources/${resource.id}`);

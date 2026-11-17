@@ -9,6 +9,7 @@ import { BAND_LABELS, BAND_STYLES, EDUCATION_LABELS, GOAL_LABELS } from '../../l
 import { avatarTint, initials } from '../../lib/people';
 import EmptyState from '../ui/EmptyState';
 import { TopicTile } from '../ui/TopicFace';
+import { useConfirm } from '../../context/ConfirmContext';
 
 const TYPE_LABELS = { written: 'Written task', file: 'File task' };
 export const ADDED_LABEL = 'Added by the beneficiary';
@@ -332,10 +333,11 @@ export function ItemForm({ kind, item, onDone, onCancel }) {
 
 // Add button + form, for a section the beneficiary can add to.
 export function useItemEditor(onChanged) {
+  const confirm = useConfirm();
   const [editing, setEditing] = useState(null); // 'new' or an item
   const [error, setError] = useState('');
   async function remove(item) {
-    if (!window.confirm(`Remove "${item.title}" from your portfolio?`)) return;
+    if (!await confirm({ title: 'Remove from your portfolio?', message: `"${item.title}" will no longer show in your portfolio.`, confirmLabel: 'Remove', danger: true })) return;
     setError('');
     try {
       await axiosClient.delete(`/elevate/portfolio/items/${item.id}`);

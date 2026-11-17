@@ -1,6 +1,7 @@
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
+import { ConfirmProvider } from './context/ConfirmContext';
 import AppRoutes from './routes/AppRoutes';
 
 export default function App() {
@@ -8,7 +9,9 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <SocketProvider>
-          <AppRoutes />
+          <ConfirmProvider>
+            <AppRoutes />
+          </ConfirmProvider>
         </SocketProvider>
       </AuthProvider>
     </BrowserRouter>

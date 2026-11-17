@@ -20,6 +20,7 @@ import { avatarTint, initials } from '../lib/people';
 import { TopicBand } from '../components/ui/TopicFace';
 import { phaseInfo } from '../lib/topicFaces';
 import { moduleEditorPath, moduleStatusOf } from '../lib/moduleStatus';
+import { useConfirm } from '../context/ConfirmContext';
 
 // The three stages (project-advisor recommendation):
 //   Incoming  - the beneficiary applied; waiting for the specialist to accept
@@ -412,6 +413,7 @@ function groupByTopic(items, moduleOf, modules) {
 // ---------------------------------------------------------------------- page
 
 export default function Modules() {
+  const confirm = useConfirm();
   const { user } = useAuth();
   const { socket } = useSocket();
   const navigate = useNavigate();
@@ -551,14 +553,14 @@ export default function Modules() {
   }
   const apply = (module, option) => act(`apply-${module.id}-${option.specialistId}`,
     () => axiosClient.post(`/elevate/applications/${module.id}`, { specialistId: option.specialistId }));
-  function cancelApplication(module) {
-    if (!window.confirm(`Cancel your application to ${module.specialistName} for ${module.title}? You can then apply to another specialist.`)) return;
+  async function cancelApplication(module) {
+    if (!await confirm({ title: 'Cancel your application?', message: `Your application to ${module.specialistName} for ${module.title} is withdrawn. You can then apply to another specialist.`, confirmLabel: 'Cancel application', cancelLabel: 'Keep it', danger: true })) return;
     act(`cancel-${module.id}`, () => axiosClient.delete(`/elevate/applications/${module.id}`));
   }
   const accept = (application) => act(`accept-${application.moduleId}-${application.beneficiaryId}`,
     () => axiosClient.post(`/elevate/applications/${application.moduleId}/${application.beneficiaryId}/accept`));
-  function decline(application) {
-    if (!window.confirm(`Decline ${application.learnerName}'s application for ${application.moduleTitle}? It goes to the next specialist who fits.`)) return;
+  async function decline(application) {
+    if (!await confirm({ title: `Decline ${application.learnerName}'s application?`, message: `Their application for ${application.moduleTitle} goes to the next specialist who fits.`, confirmLabel: 'Decline', danger: true })) return;
     act(`decline-${application.moduleId}-${application.beneficiaryId}`,
       () => axiosClient.post(`/elevate/applications/${application.moduleId}/${application.beneficiaryId}/decline`));
   }

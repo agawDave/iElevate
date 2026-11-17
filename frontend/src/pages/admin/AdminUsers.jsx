@@ -2,6 +2,7 @@ import { useState } from 'react';
 import AppLayout from '../../components/layout/AppLayout';
 import axiosClient from '../../api/axiosClient';
 import { useAuth } from '../../context/AuthContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import {
   AdminHeader,
   DateCell,
@@ -25,6 +26,7 @@ function accountType(row) {
 }
 
 export default function AdminUsers() {
+  const confirm = useConfirm();
   const { user } = useAuth();
   const { rows, pagination, extra, loading, error, params, setParam, clearAll, reload } = useDirectory('/admin/users', { sort: 'newest' });
   const [busyId, setBusyId] = useState(null);
@@ -35,7 +37,7 @@ export default function AdminUsers() {
 
   async function setStatus(account, status) {
     const verb = { suspended: 'Suspend', banned: 'Ban', active: 'Activate' }[status];
-    if (status !== 'active' && !window.confirm(`${verb} ${account.full_name}? They won’t be able to sign in until an admin activates them again.`)) return;
+    if (status !== 'active' && !await confirm({ title: `${verb} ${account.full_name}?`, message: 'They won’t be able to sign in until an admin activates them again.', confirmLabel: verb, danger: true })) return;
     setBusyId(account.id);
     setNotice('');
     try {

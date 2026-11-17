@@ -7,6 +7,7 @@ import PasteQuestions from './PasteQuestions';
 import ChoiceInputs, { enterGoesTo, fillChoiceBoxes, filledChoiceCount, packChoices } from './ChoiceInputs';
 import { ACTIVITY_FILE_HINT } from '../../lib/activityFiles';
 import { SkeletonLines } from '../ui/Skeleton';
+import { useConfirm } from '../../context/ConfirmContext';
 
 // file: a new file to upload; currentFile: the file a file task already has.
 const EMPTY_FORM = { id: null, type: 'multiple_choice', prompt: '', options: fillChoiceBoxes(), correctOption: 0, file: null, currentFile: null };
@@ -25,6 +26,7 @@ const MAX_ACTIVITIES = 50;
 // (many multiple-choice questions at once, for either). start = 'test' opens
 // straight on the test.
 export default function ActivitiesPanel({ topicId, topics = [], onClose, onChanged, start = 'activities' }) {
+  const confirm = useConfirm();
   const [currentId, setCurrentId] = useState(topicId);
   const [activities, setActivities] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -124,7 +126,7 @@ export default function ActivitiesPanel({ topicId, topics = [], onClose, onChang
     }
     const editing = activities.find((activity) => activity.id === form.id);
     if (editing && editing.type !== form.type && editing.answers > 0
-      && !window.confirm(`Changing the kind of activity deletes the ${editing.answers} answer${editing.answers === 1 ? '' : 's'} learners already gave. Continue?`)) return;
+      && !await confirm({ title: 'Change the kind of activity?', message: `This deletes the ${editing.answers} answer${editing.answers === 1 ? '' : 's'} learners already gave.`, confirmLabel: 'Change it', danger: true })) return;
     setSaving(true);
     setError('');
     setFormError('');
@@ -156,8 +158,8 @@ export default function ActivitiesPanel({ topicId, topics = [], onClose, onChang
   }
 
   async function remove(activity) {
-    const warning = activity.answers ? ` ${activity.answers} learner answer${activity.answers === 1 ? '' : 's'} to it will be deleted too.` : '';
-    if (!window.confirm(`Remove this activity?${warning}`)) return;
+    const message = activity.answers ? `${activity.answers} learner answer${activity.answers === 1 ? '' : 's'} to it will be deleted too.` : 'Your learners will no longer see it.';
+    if (!await confirm({ title: 'Remove this activity?', message, confirmLabel: 'Remove', danger: true })) return;
     setError('');
     try {
       const response = await axiosClient.delete(`/elevate/activities/${activity.id}`);

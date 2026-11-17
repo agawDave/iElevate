@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import axiosClient from '../../api/axiosClient';
 import { DetailPanel } from '../admin/Directory';
+import { useConfirm } from '../../context/ConfirmContext';
 
 // A beneficiary asked this specialist for a recommendation for their career
 // portfolio. The specialist writes it (and can edit it later) or declines.
 export default function RecommendationPanel({ recommendation, learnerName, moduleTitle, onClose, onChanged }) {
+  const confirm = useConfirm();
   const [text, setText] = useState(recommendation.body);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -28,8 +30,8 @@ export default function RecommendationPanel({ recommendation, learnerName, modul
     run(() => axiosClient.put(`/elevate/portfolio/recommendations/${recommendation.id}/write`, { body: text }), 'Could not save the recommendation.');
   }
 
-  function decline() {
-    if (!window.confirm(`Tell ${firstName} you can't write a recommendation right now?`)) return;
+  async function decline() {
+    if (!await confirm({ title: `Decline ${firstName}'s request?`, message: `${firstName} will see that you can't write a recommendation right now.`, confirmLabel: 'Decline', danger: true })) return;
     run(() => axiosClient.post(`/elevate/portfolio/recommendations/${recommendation.id}/decline`), 'Could not decline the request.');
   }
 

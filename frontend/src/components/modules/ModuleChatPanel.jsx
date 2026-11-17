@@ -7,6 +7,7 @@ import CertificateUploadDialog from '../certificates/CertificateUploadDialog';
 import { openCertificate } from '../../lib/certificates';
 import { formatTime } from '../../lib/sessions';
 import { avatarTint, initials } from '../../lib/people';
+import { useConfirm } from '../../context/ConfirmContext';
 
 const STATUS_LABELS = { ongoing: 'Ongoing', completed: 'Completed' };
 const STATUS_STYLES = {
@@ -28,6 +29,7 @@ function Avatar({ name, src, size = 'h-8 w-8' }) {
 // The private chat for one topic between a learner and their specialist,
 // shown in a side panel from the topic's card on the Modules page.
 export default function ModuleChatPanel({ conversation, module, isSpecialist, onOpenMaterials, onChanged, onClose, onViewProfile }) {
+  const confirm = useConfirm();
   const { user } = useAuth();
   const { socket, connected } = useSocket();
   const [messages, setMessages] = useState([]);
@@ -149,7 +151,7 @@ export default function ModuleChatPanel({ conversation, module, isSpecialist, on
   }
 
   async function reopenTopic() {
-    if (!window.confirm(`Reopen ${module.title} for ${otherName}? Their certificate is withdrawn and deleted.`)) return;
+    if (!await confirm({ title: `Reopen ${module.title} for ${otherName}?`, message: 'Their certificate is withdrawn and deleted.', confirmLabel: 'Reopen topic', danger: true })) return;
     setReopening(true);
     setError('');
     setNotice('');

@@ -109,6 +109,9 @@
   .pop-enter {
     animation: ie-pop-in 0.22s ease-out backwards;
   }
+  .fade-enter {
+    animation: ie-fade-in 0.2s ease-out backwards;
+  }
   /* The confetti on a finished topic falls into place once. */
   @keyframes ie-confetti-fall {
     from { opacity: 0; transform: translateY(-40px) rotate(0deg); }
