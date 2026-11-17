@@ -30,7 +30,7 @@ export default function Portfolio() {
 
   return (
     <AppLayout>
-      <div className="max-w-4xl">
+      <div>
         {/* On paper the portfolio starts with its own first page (the header doesn't print). */}
         <PageHeader
           title="My Portfolio"
