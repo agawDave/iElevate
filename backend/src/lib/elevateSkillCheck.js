@@ -369,6 +369,8 @@ const TOPIC_BY_SLUG = new Map(TOPICS.map((topic) => [topic.slug, topic]));
 const slugsFor = (...codes) => codes.map((code) => TOPICS.find((topic) => topic.code === code).slug);
 
 // A3: the learner's goal decides which topics are checked and recommended.
+// The skill check shows only the goal's topics, so only those can go into the
+// learning plan; "Not sure yet" (showsAll) shows every topic, its own first.
 const TRACKS = {
   job: {
     label: 'Get hired for an office or BPO job',
@@ -385,8 +387,16 @@ const TRACKS = {
   undecided: {
     label: 'Not sure yet',
     slugs: slugsFor('T1', 'T2', 'T3', 'T4', 'T5', 'T6'),
+    showsAll: true,
   },
 };
+
+// The topics the skill check shows for a goal, in training-design order.
+function topicsForGoal(goalTrack) {
+  const track = TRACKS[goalTrack];
+  if (!track) return [];
+  return track.showsAll ? TOPICS : TOPICS.filter((topic) => track.slugs.includes(topic.slug));
+}
 
 // A topic waits as "next up" until each prerequisite reaches 1.0 (Developing).
 const PREREQUISITES = new Map([
@@ -395,6 +405,16 @@ const PREREQUISITES = new Map([
   ['T10', ['T1', 'T5']], ['T11', ['T2', 'T4', 'T5', 'T6']],
   ['T13', ['T12']], ['T14', ['T12']],
 ].map(([code, needs]) => [slugsFor(code)[0], slugsFor(...needs)]));
+
+// A foundation topic is still recommended when the learner rated it "On my
+// own" but can't do a topic built on it at all ("Never"): Basic Computer
+// Operation comes back when Google Document, Slides or Spreadsheet is "Never",
+// and Introduction to Digital Marketing when Core Digital Marketing or
+// Building a Digital Business is "Never".
+const FOUNDATIONS = new Map([
+  [slugsFor('T1')[0], slugsFor('T2', 'T3', 'T4')],
+  [slugsFor('T12')[0], slugsFor('T13', 'T14')],
+]);
 
 // Phases 2 and 3 reported scheduling conflicts and overload, so only a few
 // topics are matched at once; the rest wait as next up.
@@ -421,11 +441,11 @@ function bandFor(level) {
   return BANDS.find((entry) => level < entry.below);
 }
 
-// Topics the learner rates: all 14 in training-design order, minus topics
-// missing from the database, minus computer topics when they have never used
-// a computer (those start from the basics without being asked).
-function topicsToCheck(usedComputer, availableSlugs) {
-  return TOPICS
+// Topics the learner rates: their goal's topics in training-design order,
+// minus topics missing from the database, minus computer topics when they have
+// never used a computer (those start from the basics without being asked).
+function topicsToCheck(usedComputer, availableSlugs, goalTrack) {
+  return topicsForGoal(goalTrack)
     .filter((topic) => availableSlugs.has(topic.slug))
     .filter((topic) => usedComputer || !topic.computerBased);
 }
@@ -439,6 +459,8 @@ function publicQuestionnaire(topicRows) {
       value,
       label: track.label,
       slugs: track.slugs.filter((slug) => rowBySlug.has(slug)),
+      // The task rows shown for this goal.
+      shows: topicsForGoal(value).map((topic) => topic.slug).filter((slug) => rowBySlug.has(slug)),
     })),
     activeTopicLimit: ACTIVE_TOPIC_LIMIT,
     topics: TOPICS.filter((topic) => rowBySlug.has(topic.slug)).map((topic) => ({
@@ -476,7 +498,7 @@ function validateSubmission(body, availableSlugs) {
 
   const answers = input.answers && typeof input.answers === 'object' ? input.answers : {};
   const cleanAnswers = {};
-  for (const topic of topicsToCheck(profile.usedComputer, availableSlugs)) {
+  for (const topic of topicsToCheck(profile.usedComputer, availableSlugs, profile.goalTrack)) {
     const rating = answers[topic.slug]?.rating;
     if (!isIntInRange(rating, 0, RATING_SCALE.length - 1)) {
       return { error: `Answer every row, including “${TASKS[topic.code]}”.` };
@@ -517,10 +539,13 @@ function scoreSubmission({ profile, answers }, topicRows) {
   const titleOf = (slug) => rowBySlug.get(slug)?.title || TOPIC_BY_SLUG.get(slug).title;
   const goalSlugs = TRACKS[profile.goalTrack].slugs.filter((slug) => rowBySlug.has(slug));
   const goalSet = new Set(goalSlugs);
+  // Only the topics shown for the goal are scored: the goal's own first, then
+  // (for "Not sure yet") the rest in training-design order.
+  const shown = new Set(topicsForGoal(profile.goalTrack).map((topic) => topic.slug));
   const orderedSlugs = [
     ...goalSlugs,
     ...TOPICS.map((topic) => topic.slug).filter((slug) => rowBySlug.has(slug) && !goalSet.has(slug)),
-  ];
+  ].filter((slug) => shown.has(slug));
 
   const scored = orderedSlugs.map((slug) => {
     const answer = answers[slug];
@@ -542,14 +567,27 @@ function scoreSubmission({ profile, answers }, topicRows) {
   });
 
   const levelBySlug = new Map(scored.map((entry) => [entry.slug, entry.level]));
+  // Topics the learner answered "Never" (not skipped ones, which start from the basics anyway).
+  const answeredNever = new Set(scored.filter((entry) => entry.selfScore === 0).map((entry) => entry.slug));
   let activeCount = 0;
   return scored.map((entry) => {
     const topic = TOPIC_BY_SLUG.get(entry.slug);
     const band = bandFor(entry.level);
     const onGoal = goalSet.has(entry.slug);
+    const neverBuiltOn = (FOUNDATIONS.get(entry.slug) || []).filter((slug) => answeredNever.has(slug));
     let outcome;
     let reason;
-    if (entry.level >= 2.0) {
+    if (entry.level >= 2.0 && neverBuiltOn.length) {
+      const why = `Recommended because you answered Never for ${joinTitles(neverBuiltOn.map(titleOf))}, which ${neverBuiltOn.length === 1 ? 'builds' : 'build'} on it.`;
+      if (activeCount < ACTIVE_TOPIC_LIMIT) {
+        outcome = 'active';
+        activeCount += 1;
+        reason = why;
+      } else {
+        outcome = 'next_up';
+        reason = `${why} Starts when you finish one of your current topics (up to ${ACTIVE_TOPIC_LIMIT} at a time).`;
+      }
+    } else if (entry.level >= 2.0) {
       outcome = 'refresher';
       reason = 'You can already do this on your own. A refresher is optional.';
     } else {

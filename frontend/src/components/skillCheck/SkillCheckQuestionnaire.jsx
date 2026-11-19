@@ -5,7 +5,8 @@ import { SkeletonLines } from '../ui/Skeleton';
 
 // ELEVATE skill check (Orientation, Pre-test, Profiling): one general page for
 // every beneficiary. About-you questions, then one plain task per ELEVATE topic
-// rated Never / With help / On my own. The server scores it and picks topics.
+// for their goal ("Not sure yet" shows all of them), rated Never / With help /
+// On my own. The server scores it and picks topics.
 
 // Demographic data (sex, age, work, barangay) lives on the Profile, not here.
 const EMPTY_PROFILE = {
@@ -93,12 +94,16 @@ export default function SkillCheckQuestionnaire({ initialProfile, onComplete }) 
     return () => { active = false; };
   }, []);
 
-  // Every topic, except computer topics for someone who has never used a
-  // computer: they start from the basics without being asked.
+  // The goal's topics (none until a goal is chosen), except computer topics for
+  // someone who has never used a computer: they start from the basics without being asked.
   const topics = useMemo(() => {
     if (!questionnaire) return [];
-    return questionnaire.topics.filter((topic) => profile.usedComputer !== false || !topic.computerBased);
-  }, [questionnaire, profile.usedComputer]);
+    const shows = questionnaire.tracks.find((track) => track.value === profile.goalTrack)?.shows;
+    if (!shows) return [];
+    return questionnaire.topics
+      .filter((topic) => shows.includes(topic.slug))
+      .filter((topic) => profile.usedComputer !== false || !topic.computerBased);
+  }, [questionnaire, profile.goalTrack, profile.usedComputer]);
 
   function updateProfile(changes) {
     setProfile((current) => ({ ...current, ...changes }));
@@ -179,12 +184,16 @@ export default function SkillCheckQuestionnaire({ initialProfile, onComplete }) 
       <section>
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
           <h3 className="text-sm font-semibold text-slate-800">How well can you do these?</h3>
-          <span className="text-xs text-slate-500">{answeredCount} of {topics.length} answered</span>
+          {profile.goalTrack && <span className="text-xs text-slate-500">{answeredCount} of {topics.length} answered</span>}
         </div>
-        <p className="mb-2 text-xs text-slate-500">
-          Be honest: anything you can’t do on your own yet becomes a topic you learn, matched with a specialist.
-        </p>
-        <div className="divide-y divide-stone-100 rounded-xl border border-stone-200 bg-white">
+        {profile.goalTrack ? (
+          <p className="mb-2 text-xs text-slate-500">
+            {profile.goalTrack === 'undecided' ? 'These are all the ELEVATE skills.' : 'These are the skills your goal needs.'} Be honest: anything you can’t do on your own yet becomes a topic you learn, matched with a specialist.
+          </p>
+        ) : (
+          <p className="rounded-xl border border-dashed border-stone-300 px-3 py-4 text-sm text-slate-500">Choose your main goal above, and the skills it needs show here.</p>
+        )}
+        {topics.length > 0 && <div className="divide-y divide-stone-100 rounded-xl border border-stone-200 bg-white">
           {topics.map((topic) => (
             <TaskRow
               key={topic.slug}
@@ -195,7 +204,7 @@ export default function SkillCheckQuestionnaire({ initialProfile, onComplete }) 
               onChange={(value) => rate(topic.slug, value)}
             />
           ))}
-        </div>
+        </div>}
       </section>
 
       <details className="rounded-lg border border-stone-200 px-3 py-2">

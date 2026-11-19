@@ -29,7 +29,6 @@ const LINK_PATHS = {
   task: (id) => `/elevate/activities/${id}/file/link`,
   answer: (id) => `/elevate/activities/answers/${id}/file/link`,
   portfolio: (id) => `/elevate/portfolio/items/${id}/file/link`,
-  resume: (id) => `/elevate/portfolio/career/resume/${id}/file/link`,
 };
 
 // kind: 'task' (the worksheet, by activity id), 'answer' (by answer id) or

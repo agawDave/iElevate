@@ -391,7 +391,6 @@ async function getReport(req, res) {
     entry[row.test_kind] = { score: Number(row.score), total: Number(row.total) };
     testByPair.set(key, entry);
   });
-  const percent = (attempt) => (attempt.total ? Math.round((attempt.score / attempt.total) * 100) : 0);
   const skillByPair = new Map();
   skills.forEach((row) => {
     const key = `${row.module_id}:${row.user_id}`;
@@ -428,14 +427,9 @@ async function getReport(req, res) {
       completedAt: pair.completed_at,
     };
   });
+  // Per topic: how many beneficiaries are incoming, ongoing and completed (the Progress chart).
   const progressByTopic = topics.map((topic) => {
     const rows = progressRows.filter((row) => Number(row.moduleId) === Number(topic.id));
-    const withActivities = rows.filter((row) => row.stage !== 'incoming' && row.activitiesTotal > 0);
-    const retaken = [...skillByPair.entries()].filter(([key, entry]) => key.startsWith(`${topic.id}:`) && entry.pre && entry.post);
-    const preAll = [...skillByPair.entries()].filter(([key, entry]) => key.startsWith(`${topic.id}:`) && entry.pre);
-    const tookPre = rows.filter((row) => row.preTest);
-    const tookBoth = tookPre.filter((row) => row.postTest);
-    const averagePercent = (attempts) => (attempts.length ? Math.round(attempts.reduce((sum, attempt) => sum + percent(attempt), 0) / attempts.length) : null);
     return {
       moduleId: topic.id,
       title: topic.title,
@@ -443,21 +437,6 @@ async function getReport(req, res) {
       incoming: rows.filter((row) => row.stage === 'incoming').length,
       ongoing: rows.filter((row) => row.stage === 'ongoing').length,
       completed: rows.filter((row) => row.stage === 'completed').length,
-      activityCompletion: withActivities.length
-        ? Math.round((withActivities.reduce((sum, row) => sum + row.activitiesDone / row.activitiesTotal, 0) / withActivities.length) * 100)
-        : null,
-      skillChecked: preAll.length,
-      preAverage: average(preAll.map(([, entry]) => entry.pre.level)),
-      retaken: retaken.length,
-      retakenPreAverage: average(retaken.map(([, entry]) => entry.pre.level)),
-      postAverage: average(retaken.map(([, entry]) => entry.post.level)),
-      // Module test, as % correct: everyone who took the pre-test, and the
-      // before/after of those who took both.
-      testPreTaken: tookPre.length,
-      testPreAverage: averagePercent(tookPre.map((row) => row.preTest)),
-      testBoth: tookBoth.length,
-      testBothPreAverage: averagePercent(tookBoth.map((row) => row.preTest)),
-      testBothPostAverage: averagePercent(tookBoth.map((row) => row.postTest)),
     };
   });
 

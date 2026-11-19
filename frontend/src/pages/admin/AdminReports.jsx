@@ -56,10 +56,6 @@ function shortDate(value) {
   return value ? new Date(value).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 }
 
-function level(value) {
-  return value === null || value === undefined ? '—' : Number(value).toFixed(1);
-}
-
 function Section({ title, subtitle, actions, children }) {
   return (
     <section className="mt-8 break-inside-avoid-page rounded-2xl border border-stone-200 bg-white p-5 print:mt-6 print:rounded-none print:border-0 print:p-0">
@@ -372,38 +368,6 @@ export default function AdminReports() {
               ))}
             </div>
             <StackedTopicBars rows={report.progress.byTopic} series={PIPELINE_SERIES} visible={PIPELINE_SERIES.map((item) => item.key)} emptyText="No topics match these filters." />
-            <h3 className="mb-2 mt-6 text-sm font-semibold text-slate-800">By topic</h3>
-            <ReportTable
-              rows={report.progress.byTopic.map((row) => ({ ...row, key: row.moduleId }))}
-              limit={20}
-              emptyText="No topics match these filters."
-              columns={[
-                { label: 'Topic', render: (row) => <><p className="text-slate-900">{row.title}</p><p className="text-xs text-slate-500">{row.phase}</p></> },
-                { label: 'Incoming', align: 'right', render: (row) => row.incoming },
-                { label: 'Ongoing', align: 'right', render: (row) => row.ongoing },
-                { label: 'Completed', align: 'right', render: (row) => row.completed },
-                { label: 'Activities done (avg)', align: 'right', render: (row) => (row.activityCompletion === null ? '—' : `${row.activityCompletion}%`) },
-                {
-                  label: 'Topic test: before → after',
-                  align: 'right',
-                  render: (row) => (row.testBoth
-                    ? <><span className="font-semibold">{row.testBothPreAverage}% → {row.testBothPostAverage}%</span><span className="block text-xs text-slate-500">{row.testBoth} took both</span></>
-                    : row.testPreTaken
-                      ? <><span className="font-semibold">{row.testPreAverage}% before</span><span className="block text-xs text-slate-500">{row.testPreTaken} took the pre-test</span></>
-                      : '—'),
-                },
-                {
-                  label: 'Start level (0–3)',
-                  align: 'right',
-                  render: (row) => (row.skillChecked ? <><span className="font-semibold">{level(row.preAverage)}</span><span className="block text-xs text-slate-500">{row.skillChecked} {row.skillChecked === 1 ? 'learner' : 'learners'}</span></> : '—'),
-                },
-                {
-                  label: 'Retook: start → now',
-                  align: 'right',
-                  render: (row) => (row.retaken ? <><span className="font-semibold">{level(row.retakenPreAverage)} → {level(row.postAverage)}</span><span className="block text-xs text-slate-500">{row.retaken} {row.retaken === 1 ? 'learner' : 'learners'}</span></> : '—'),
-                },
-              ]}
-            />
             <h3 className="mb-2 mt-6 text-sm font-semibold text-slate-800">Each beneficiary and topic</h3>
             <ReportTable
               rows={report.progress.learners.map((row) => ({ ...row, key: `${row.moduleId}-${row.learnerId}` }))}

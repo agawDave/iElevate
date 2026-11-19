@@ -37,7 +37,7 @@ export const TIME_BLOCKS = [
 
 export const DEVICE_OPTIONS = [
   { value: 'computer', label: 'I have my own computer or laptop' },
-  { value: 'smartphone', label: 'I only have a smartphone' },
+  //{ value: 'smartphone', label: 'I only have a smartphone' },
   { value: 'none', label: 'I don’t have a device I can use' },
 ];
 

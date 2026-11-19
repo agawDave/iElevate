@@ -9,7 +9,6 @@ import MaterialsPanel from '../components/modules/MaterialsPanel';
 import LearnerProfilePanel from '../components/modules/LearnerProfilePanel';
 import ActivitiesPanel from '../components/modules/ActivitiesPanel';
 import AnswersPanel from '../components/modules/AnswersPanel';
-import RecommendationPanel from '../components/modules/RecommendationPanel';
 import PageHeader, { HeaderStat, headerButtonClass } from '../components/layout/PageHeader';
 import { openCertificate } from '../lib/certificates';
 import { formatDay, waitedFor } from '../lib/sessions';
@@ -428,7 +427,6 @@ export default function Modules() {
   const [activityInfo, setActivityInfo] = useState({});
   const [activitiesFor, setActivitiesFor] = useState(null);
   const [answersFor, setAnswersFor] = useState(null);
-  const [recommendationFor, setRecommendationFor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   // A message passed from another page (e.g. "sent to the admin" after submitting a module).
@@ -713,15 +711,6 @@ export default function Modules() {
                         Answers{progressOf(item).toReview ? ` (${progressOf(item).toReview} to read)` : ''}
                       </button>
                     )}
-                    {progressOf(item).recommendation && progressOf(item).recommendation.status !== 'declined' && (
-                      <button
-                        type="button"
-                        onClick={() => setRecommendationFor({ recommendation: progressOf(item).recommendation, learnerName: item.otherUserName, moduleTitle: module.title })}
-                        className={buttonStyles.outline}
-                      >
-                        Recommendation{progressOf(item).recommendation.status === 'requested' ? ' (asked)' : ''}
-                      </button>
-                    )}
                     <button type="button" onClick={() => openChat(item)} className={`relative ${tab === 'ongoing' ? buttonStyles.primary : buttonStyles.outline}`}>
                       Chat{item.unreadCount ? ` (${item.unreadCount} new)` : ''}
                       {waitingForReply(item) && <ReplyDot label={`${item.otherUserName} is waiting for your reply`} />}
@@ -821,15 +810,6 @@ export default function Modules() {
       {profileFor && <LearnerProfilePanel beneficiaryId={profileFor} onClose={() => setProfileFor(null)} />}
       {activitiesFor && (
         <ActivitiesPanel topicId={activitiesFor} topics={modules.map((module) => ({ id: module.id, title: module.title }))} onClose={() => setActivitiesFor(null)} onChanged={load} />
-      )}
-      {recommendationFor && (
-        <RecommendationPanel
-          recommendation={recommendationFor.recommendation}
-          learnerName={recommendationFor.learnerName}
-          moduleTitle={recommendationFor.moduleTitle}
-          onClose={() => setRecommendationFor(null)}
-          onChanged={load}
-        />
       )}
       {answersFor && (
         <AnswersPanel

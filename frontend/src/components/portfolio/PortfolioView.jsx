@@ -25,9 +25,6 @@ const ITEM_COPY = {
   project: { add: '+ Add a project', title: 'Project title', placeholder: 'e.g. Website for our barangay store', notes: 'What is it, and what did you do?', file: 'File (optional if you described it)' },
   award: { add: '+ Add an award', title: 'Award or recognition', placeholder: 'e.g. Best Project, Barangay Skills Fair', notes: 'Who gave it, and why? (optional)', file: 'Picture or file of the award (optional)' },
   photo: { add: '+ Add a photo', title: 'Photo title', placeholder: 'e.g. Our training at the barangay hall', notes: 'Caption (optional)', file: 'Photo' },
-  license: { add: '+ Add a license', title: 'License or eligibility', placeholder: 'e.g. TESDA NC II, Computer Systems Servicing', notes: 'Issued by, license number (optional)', file: 'Picture or file of the license (optional)' },
-  training: { add: '+ Add a training', title: 'Training or seminar', placeholder: 'e.g. Customer Service Seminar', notes: 'Who gave it, and how long? (optional)', file: 'Certificate or file (optional)' },
-  letter: { add: '+ Upload a letter', title: 'Letter from', placeholder: 'e.g. Letter from our Barangay Captain', notes: 'Or type the testimonial here', file: 'The letter (optional if you typed it)' },
 };
 
 export function longDate(value) {
@@ -132,33 +129,6 @@ function Reflection({ item, own }) {
   );
 }
 
-// "Show in career portfolio": the beneficiary picks their best work for employers.
-function CareerToggle({ path, checked, onChanged }) {
-  const [on, setOn] = useState(checked);
-  const [error, setError] = useState('');
-  async function change(event) {
-    const next = event.target.checked;
-    setOn(next);
-    setError('');
-    try {
-      await axiosClient.put(path, { show: next });
-      await onChanged();
-    } catch (requestError) {
-      setOn(!next);
-      setError(requestError.response?.data?.message || 'Could not save that.');
-    }
-  }
-  return (
-    <div className="mt-2 print:hidden">
-      <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700">
-        <input type="checkbox" checked={on} onChange={change} className="h-4 w-4 accent-emerald-600" />
-        Show in career portfolio
-      </label>
-      {error && <p role="alert" className="mt-1 text-xs text-red-600">{error}</p>}
-    </div>
-  );
-}
-
 function WorkItem({ item, specialistFirstName, own, onChanged }) {
   return (
     <li className="rounded-lg border border-stone-200 bg-stone-50/60 p-3 print:break-inside-avoid">
@@ -176,7 +146,6 @@ function WorkItem({ item, specialistFirstName, own, onChanged }) {
         <p className="mt-2 text-xs text-slate-500">Not read by the specialist yet.</p>
       )}
       <Reflection item={item} own={own} />
-      {own && <CareerToggle path={`/elevate/portfolio/work/${item.answerId}/career`} checked={item.showInCareer} onChanged={onChanged} />}
     </li>
   );
 }
@@ -376,7 +345,6 @@ export function ItemCard({ item, own, editor, addedLabel = ADDED_LABEL, onChange
       {item.previewUrl && <img src={item.previewUrl} alt={item.title} className="mt-2 max-h-56 rounded-lg border border-stone-200 object-contain" />}
       {item.file && !item.previewUrl && <div className="mt-2 print:hidden"><ActivityFileLink kind="portfolio" id={item.id} file={item.file} /></div>}
       {item.file && !item.previewUrl && <p className="mt-1 hidden text-sm text-slate-700 print:block">File: {item.file.name}</p>}
-      {own && item.kind === 'project' && onChanged && <CareerToggle path={`/elevate/portfolio/items/${item.id}/career`} checked={item.showInCareer} onChanged={onChanged} />}
     </li>
   );
 }
