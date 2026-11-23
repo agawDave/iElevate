@@ -132,10 +132,14 @@ export default function SpecialistDashboard({ greeting, firstName }) {
               <Card plain title="Upcoming sessions" link={{ to: '/sessions', label: 'View all' }}>
                 {data.sessions.length
                   ? <ul className="divide-y divide-stone-100">{data.sessions.map((session) => <SessionRow key={session.id} session={session} person={session.person} />)}</ul>
-                  : <EmptyState icon="calendar" compact title="No sessions coming up" action={data.learners.length ? { to: '/sessions', label: 'Book a session' } : undefined}>
-                    {data.learners.length ? 'Meet a learner online or face to face.' : 'Once you accept learners, you can book sessions with them.'}
+                  : <EmptyState icon="calendar" compact title="No face-to-face sessions coming up" action={{ to: '/sessions', label: 'Book a session' }}>
+                    {data.learners.length ? 'Meet your learners face to face, one-on-one or in an open session.' : 'Post an open face-to-face session, or book one once you accept learners.'}
                   </EmptyState>}
-                {data.summary.sessionsHeld > 0 && <p className="mt-2 text-xs text-slate-500">{data.summary.sessionsHeld} session{data.summary.sessionsHeld === 1 ? '' : 's'} held so far</p>}
+                {(data.summary.onlineSessions > 0 || data.summary.faceToFaceHeld > 0) && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    So far: {data.summary.onlineSessions} online session{data.summary.onlineSessions === 1 ? '' : 's'} with your learners · {data.summary.faceToFaceHeld} face-to-face held
+                  </p>
+                )}
               </Card>
               <Card plain title="Your topics" link={{ to: '/modules', label: 'See all' }}>
                 {data.topics.length

@@ -4,7 +4,8 @@ const {
   evaluateMatch,
 } = require('../lib/elevateCircumstances');
 const { evaluateTeachingFit, describeTeachingWaiting } = require('../lib/elevateTeachingFit');
-const { ACTIVE_TOPIC_LIMIT, PREREQUISITES } = require('../lib/elevateSkillCheck');
+const { ACTIVE_TOPIC_LIMIT } = require('../lib/elevateSkillCheck');
+const { offeredSql, loadPrerequisiteSlugs } = require('../lib/programPhases');
 
 // Circumstances plus the Profile address (country, province or state, city,
 // barangay), which is where both learners and specialists say where they are.
@@ -36,6 +37,9 @@ async function lockLearner(connection, learnerId) {
 // topics: who teaches what, their loads and circumstances, the learner's
 // assignments, and who declined them.
 async function loadMatchingContext(connection, learnerId) {
+  // The learner's topics that are offered this year, plus any topic a
+  // specialist already accepted them into (it carries on even if the admin
+  // takes it out of this year's training design).
   const [topics] = await connection.query(
     `SELECT lm.id AS module_id, lm.title, ms.skill_id, wants.learning_status, wants.status_reason,
             wants.proficiency AS learner_proficiency
@@ -44,8 +48,11 @@ async function loadMatchingContext(connection, learnerId) {
      JOIN user_skills wants ON wants.skill_id = ms.skill_id
        AND wants.user_id = ? AND wants.relation_type = 'wants_to_learn'
      WHERE lm.is_elevate_program = 1 AND lm.approval_status = 'approved'
+       AND (${offeredSql('lm')} OR EXISTS (
+         SELECT 1 FROM elevate_module_assignments kept
+         WHERE kept.module_id = lm.id AND kept.beneficiary_id = ? AND kept.assignment_status = 'assigned'))
      ORDER BY lm.sort_order, lm.id`,
-    [learnerId]
+    [learnerId, learnerId]
   );
   const moduleIds = topics.map((topic) => topic.module_id);
 
@@ -361,10 +368,11 @@ async function recomputeAssignmentsForSpecialist() {
 
 // After a topic is completed, start next-up topics (in training-design order)
 // until the learner is back to the active-topic limit. A next-up topic waits
-// while any of its prerequisites is still being learned.
+// while any of its prerequisites is still being learned, and only topics
+// offered this year start.
 async function promoteNextUpTopics(beneficiaryId, connection = pool) {
   const [rows] = await connection.query(
-    `SELECT us.id, s.slug, us.learning_status
+    `SELECT us.id, s.slug, us.learning_status, ${offeredSql('lm')} AS offered
      FROM user_skills us
      JOIN skills s ON s.id = us.skill_id
      LEFT JOIN learning_modules lm ON lm.slug = s.slug
@@ -372,13 +380,14 @@ async function promoteNextUpTopics(beneficiaryId, connection = pool) {
      ORDER BY lm.sort_order, lm.id`,
     [beneficiaryId]
   );
+  const prerequisites = await loadPrerequisiteSlugs(connection);
   const statusBySlug = new Map(rows.map((row) => [row.slug, row.learning_status || 'active']));
   let active = rows.filter((row) => (row.learning_status || 'active') === 'active').length;
   const promoted = [];
   for (const row of rows) {
     if (active >= ACTIVE_TOPIC_LIMIT) break;
-    if (row.learning_status !== 'next_up') continue;
-    const blocked = (PREREQUISITES.get(row.slug) || [])
+    if (row.learning_status !== 'next_up' || !Number(row.offered)) continue;
+    const blocked = (prerequisites.get(row.slug) || [])
       .some((slug) => ['active', 'next_up'].includes(statusBySlug.get(slug)));
     if (blocked) continue;
     await connection.query(

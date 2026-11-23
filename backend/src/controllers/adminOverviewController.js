@@ -60,7 +60,7 @@ async function adminOverview(req, res) {
       // How far beneficiaries got (each one counted once, at every step they reached).
       funnel: [
         { key: 'joined', label: 'Signed up', value: n.beneficiaries },
-        { key: 'skillCheck', label: 'Took the skill check', value: n.skill_checked },
+        { key: 'skillCheck', label: 'Took the pre-assessment', value: n.skill_checked },
         { key: 'applied', label: 'Applied to a topic', value: n.applied },
         { key: 'accepted', label: 'Accepted by a specialist', value: n.accepted },
         { key: 'completed', label: 'Completed a topic', value: n.completed_people },

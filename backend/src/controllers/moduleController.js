@@ -1,4 +1,5 @@
 const { pool } = require('../config/db');
+const { offeredSql } = require('../lib/programPhases');
 const {
   recomputeElevateAssignments,
 } = require('../services/elevateAssignmentService');
@@ -83,7 +84,7 @@ async function listModules(req, res) {
         JOIN user_skills teach_us ON teach_us.skill_id = teach_ms.skill_id
           AND teach_us.relation_type = 'teaches' AND teach_us.user_id = ?
         WHERE teach_ms.module_id = lm.id AND teach_ms.is_primary = 1
-      )
+      ) AND ${offeredSql('lm')}
     )`);
     whereParams.push(userId, userId);
   } else {

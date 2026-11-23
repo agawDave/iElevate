@@ -34,9 +34,9 @@ const icons = {
       <path d="M10 2L1 6.5l9 4.5 7-3.5V13h2V6.5L10 2zM4 10.6V14c0 1.66 2.69 3 6 3s6-1.34 6-3v-3.4l-6 3-6-3z" />
     </svg>
   ),
-  approval: (
+  design: (
     <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-      <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.4L10.6 2H6zm6.7 7.7a1 1 0 00-1.4-1.4L9 10.6l-.8-.8a1 1 0 00-1.4 1.4l1.5 1.5a1 1 0 001.4 0l3-3z" clipRule="evenodd" />
+      <path d="M10 2 1.5 6.3 10 10.6l8.5-4.3L10 2zM3.4 9.2 1.5 10.2 10 14.5l8.5-4.3-1.9-1L10 12.5 3.4 9.2zm0 3.9-1.9 1L10 18.4l8.5-4.3-1.9-1L10 16.4l-6.6-3.3z" />
     </svg>
   ),
   messages: (
@@ -108,7 +108,7 @@ const ADMIN_LINKS = [
   { to: '/admin', label: 'Overview', icon: 'dashboard', end: true },
   { to: '/admin/beneficiaries', label: 'Beneficiaries', icon: 'people' },
   { to: '/admin/specialists', label: 'Specialists', icon: 'specialists' },
-  { to: '/admin/modules', label: 'Module approval', icon: 'approval', badge: 'pending_modules', badgeTitle: 'waiting for approval' },
+  { to: '/admin/modules', label: 'Modules', icon: 'design', badge: 'pending_modules', badgeTitle: 'waiting for approval' },
   { to: '/admin/reports', label: 'Reports', icon: 'reports' },
   { to: '/admin/activity', label: 'Activity log', icon: 'activity' },
   { to: '/admin/users', label: 'Manage users', icon: 'admin', apart: true },

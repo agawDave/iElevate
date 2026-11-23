@@ -154,7 +154,7 @@ export default function LearnerProfilePanel({ beneficiaryId, onClose }) {
             <AvailabilityGrid slots={data.learning.availability} />
           </Section>
 
-          <Section title={`Skill check${data.learning.skillCheckAt ? ` · ${formatDay(data.learning.skillCheckAt)}` : ''}`}>
+          <Section title={`Pre-assessment${data.learning.skillCheckAt ? ` · ${formatDay(data.learning.skillCheckAt)}` : ''}`}>
             {data.skills.length ? (
               <ul className="divide-y divide-stone-100 rounded-lg border border-stone-200">
                 {data.skills.map((skill) => {
@@ -169,7 +169,7 @@ export default function LearnerProfilePanel({ beneficiaryId, onClose }) {
                   );
                 })}
               </ul>
-            ) : <p className="text-sm text-slate-500">They haven&apos;t taken the skill check yet.</p>}
+            ) : <p className="text-sm text-slate-500">They haven&apos;t taken the pre-assessment yet.</p>}
           </Section>
         </div>
       )}

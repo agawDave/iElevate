@@ -5,6 +5,7 @@ export const PHASES = {
   1: { name: 'Computer & online basics', gradient: 'bg-gradient-to-br from-brand-500 to-brand-400' },
   2: { name: 'Working online', gradient: 'bg-gradient-to-br from-brand-600 to-brand-500' },
   3: { name: 'Digital business', gradient: 'bg-gradient-to-br from-brand-700 to-brand-600' },
+  4: { name: 'ELEVATE On Air', gradient: 'bg-gradient-to-br from-brand-800 to-brand-700' },
 };
 const OTHER_PHASE = { name: '', gradient: 'bg-gradient-to-br from-brand-700 to-brand-600' };
 

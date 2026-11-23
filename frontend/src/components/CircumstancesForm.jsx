@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import SelectAllControls from './SelectAllControls';
 import PlaceFields, { EMPTY_PLACE, placeError, placeFromProfile, placePayload } from './PlaceFields';
-import { formatPlace } from '../lib/places';
+import { formatPlace, livesAbroad } from '../lib/places';
 import {
   DAYS,
   DEVICE_OPTIONS,
@@ -89,7 +89,7 @@ export default function CircumstancesForm({ userType, onSaved, submitLabel, askP
         if (profileResponse) setPlace(placeFromProfile(profileResponse.data.data));
       })
       .catch((requestError) => {
-        if (active) setError(requestError.response?.data?.message || 'Unable to load your circumstances.');
+        if (active) setError(requestError.response?.data?.message || 'Unable to load your preferred setup.');
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -104,12 +104,15 @@ export default function CircumstancesForm({ userType, onSaved, submitLabel, askP
   }
 
   const offline = form.deviceAccess === 'none' || form.internetAccess === 'none';
-  const onlineOnlyButOffline = isBeneficiary && offline
+  // Outside the Philippines: online only.
+  const abroad = isBeneficiary && livesAbroad(place.country);
+  const modes = abroad ? ['online'] : form.learningModes;
+  const onlineOnlyButOffline = isBeneficiary && !abroad && offline
     && form.learningModes.length > 0 && form.learningModes.every((mode) => mode === 'online');
 
   async function save(event) {
     event.preventDefault();
-    if (!form.learningModes.length) return setError('Choose at least one learning mode.');
+    if (!modes.length) return setError('Choose at least one learning mode.');
     if (!form.availability.length) return setError('Choose at least one day and time you are available.');
     if (isBeneficiary) {
       if (!form.deviceAccess) return setError('Tell us which device you can use.');
@@ -119,6 +122,7 @@ export default function CircumstancesForm({ userType, onSaved, submitLabel, askP
         if (problem) return setError(problem);
       }
       if (onlineOnlyButOffline) return setError('Online classes need a device and internet. Also choose face-to-face or radio.');
+      if (abroad && offline) return setError('You learn online, so choose the device and internet connection you can use.');
     }
     setSaving(true);
     setError('');
@@ -127,7 +131,7 @@ export default function CircumstancesForm({ userType, onSaved, submitLabel, askP
       if (isBeneficiary && askPlace) await axiosClient.patch('/users/me', placePayload(place));
       await axiosClient.put('/users/me/circumstances', isBeneficiary
         ? {
-          learningModes: form.learningModes,
+          learningModes: modes,
           availability: form.availability,
           deviceAccess: form.deviceAccess,
           internetAccess: form.internetAccess,
@@ -141,21 +145,21 @@ export default function CircumstancesForm({ userType, onSaved, submitLabel, askP
         : 'Saved. Beneficiary matches are updated.');
       onSaved?.();
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Unable to save your circumstances.');
+      setError(requestError.response?.data?.message || 'Unable to save your preferred setup.');
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading) return <SkeletonLines lines={5} label="Loading your circumstances…" />;
+  if (loading) return <SkeletonLines lines={5} label="Loading your preferred setup…" />;
 
   return (
     <form onSubmit={save} className="space-y-6">
       <fieldset>
         <GroupHeading
           title={isBeneficiary ? 'How can you attend sessions?' : 'How do you teach?'}
-          hint="Choose every mode that works for you."
-          controls={(
+          hint={abroad ? 'You live outside the Philippines, so you learn online. Face-to-face sessions and radio lessons are only in the Philippines.' : 'Choose every mode that works for you.'}
+          controls={abroad ? null : (
             <SelectAllControls
               label="learning modes"
               onCheckAll={() => update({ learningModes: ALL_MODES })}
@@ -167,12 +171,14 @@ export default function CircumstancesForm({ userType, onSaved, submitLabel, askP
         />
         <div className="grid gap-2 sm:grid-cols-3">
           {LEARNING_MODES.map((mode) => {
-            const checked = form.learningModes.includes(mode.value);
+            const checked = modes.includes(mode.value);
+            const locked = abroad;
             return (
-              <label key={mode.value} className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition ${checked ? 'border-brand-300 bg-brand-50' : 'border-stone-200 hover:bg-stone-50'}`}>
+              <label key={mode.value} className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 transition ${locked ? (checked ? 'border-brand-300 bg-brand-50' : 'border-stone-200 opacity-50') : `cursor-pointer ${checked ? 'border-brand-300 bg-brand-50' : 'border-stone-200 hover:bg-stone-50'}`}`}>
                 <input
                   type="checkbox"
                   checked={checked}
+                  disabled={locked}
                   onChange={() => update({ learningModes: toggle(form.learningModes, mode.value) })}
                   className="mt-0.5 h-4 w-4 rounded border-stone-300 text-brand-600 focus:ring-brand-500"
                 />
@@ -250,7 +256,9 @@ export default function CircumstancesForm({ userType, onSaved, submitLabel, askP
           </div>
           {offline && (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Without a device or internet, you’ll be matched with specialists who teach face-to-face or by radio.
+              {abroad
+                ? 'You live outside the Philippines, so you learn online and need a device and internet.'
+                : 'Without a device or internet, you’ll be matched with specialists who teach face-to-face or by radio.'}
             </p>
           )}
           {askPlace ? (
@@ -296,7 +304,7 @@ export default function CircumstancesForm({ userType, onSaved, submitLabel, askP
         disabled={saving}
         className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-semibold text-brand-900 transition hover:bg-accent-550 disabled:opacity-50"
       >
-        {saving ? 'Saving…' : submitLabel || 'Save circumstances'}
+        {saving ? 'Saving…' : submitLabel || 'Save preferred setup'}
       </button>
     </form>
   );

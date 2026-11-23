@@ -4,6 +4,7 @@ const {
   recomputeAssignmentsForSpecialist,
 } = require('../services/elevateAssignmentService');
 const { PROFICIENCY_LEVELS, LEARNER_LEVELS, parseList } = require('../lib/elevateTeachingFit');
+const { offeredSql } = require('../lib/programPhases');
 
 const MAX_CERTIFICATIONS = 8;
 const MAX_CERTIFICATION_LENGTH = 100;
@@ -31,7 +32,7 @@ async function findElevateTopics(connection = pool) {
      FROM learning_modules lm
      JOIN module_skills ms ON ms.module_id = lm.id AND ms.is_primary = 1
      JOIN skills s ON s.id = ms.skill_id AND s.is_approved = 1
-     WHERE lm.is_elevate_program = 1 AND lm.approval_status = 'approved'
+     WHERE lm.is_elevate_program = 1 AND lm.approval_status = 'approved' AND ${offeredSql('lm')}
      ORDER BY lm.sort_order, lm.id`
   );
   return rows;

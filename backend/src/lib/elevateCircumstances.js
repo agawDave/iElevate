@@ -1,6 +1,7 @@
 // Learning circumstances used to match a beneficiary with the specialist
 // whose situation aligns with theirs. Keep these values in sync with
 // frontend/src/lib/circumstances.js.
+const { livesAbroad } = require('./places');
 
 const LEARNING_MODES = ['face_to_face', 'online', 'radio'];
 const MODE_LABELS = {
@@ -66,9 +67,11 @@ function isComplete(circumstances, userType) {
   return userType === 'specialist';
 }
 
-// Online classes need a device and an internet connection.
+// Online classes need a device and an internet connection. Beneficiaries
+// outside the Philippines learn online only (they use iELEVATE online anyway).
 function feasibleModes(circumstances) {
   if (!circumstances?.learningModes?.length) return null;
+  if (livesAbroad(circumstances.country)) return ['online'];
   const offline = circumstances.deviceAccess === 'none' || circumstances.internetAccess === 'none';
   return circumstances.learningModes.filter((mode) => !(mode === 'online' && offline));
 }
@@ -79,7 +82,7 @@ function uniqueValidList(value, allowed) {
   return allowed.filter((item) => value.includes(item));
 }
 
-function validateCircumstances(body, userType) {
+function validateCircumstances(body, userType, { country = null } = {}) {
   const input = body || {};
   const learningModes = uniqueValidList(input.learningModes, LEARNING_MODES);
   if (!learningModes || !learningModes.length) {
@@ -108,6 +111,13 @@ function validateCircumstances(body, userType) {
       barangay,
       serviceBarangays: [],
     };
+    if (livesAbroad(country)) {
+      if (input.deviceAccess === 'none' || input.internetAccess === 'none') {
+        return { error: 'You live outside the Philippines, so you learn online. Choose the device and internet connection you can use.' };
+      }
+      value.learningModes = ['online'];
+      return { value };
+    }
     if (!feasibleModes(value).length) {
       return { error: 'Online classes need a device and an internet connection. Also choose face-to-face or radio.' };
     }

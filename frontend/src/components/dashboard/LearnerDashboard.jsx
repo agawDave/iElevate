@@ -102,7 +102,7 @@ export default function LearnerDashboard({ greeting, firstName }) {
                 <ul className="divide-y divide-stone-100">{topics.map((topic) => <TopicRow key={topic.moduleId} topic={topic} />)}</ul>
               ) : (
                 <EmptyState icon="brand" primary title="Start your first topic" action={{ to: '/modules', label: 'Apply to a topic' }}>
-                  Choose a topic from your skill check and apply to a specialist. They guide you until your certificate.
+                  Choose a topic from your pre-assessment and apply to a specialist. They guide you until your certificate.
                 </EmptyState>
               )}
             </Card>
@@ -111,8 +111,10 @@ export default function LearnerDashboard({ greeting, firstName }) {
               <Card plain title="Upcoming sessions" link={{ to: '/sessions', label: 'View all' }}>
                 {data.sessions.length
                   ? <ul className="divide-y divide-stone-100">{data.sessions.map((session) => <SessionRow key={session.id} session={session} person={session.specialist} />)}</ul>
-                  : data.summary.learning > 0
-                    ? <EmptyState icon="calendar" compact title="No sessions yet" action={{ to: '/sessions', label: 'Book a session' }}>Meet your specialist online or face to face.</EmptyState>
+                  : data.summary.onlineOnly
+                    ? <EmptyState icon="calendar" compact title="You learn online" action={{ to: '/sessions', label: 'See your online sessions' }}>You live outside the Philippines, so each day you work on a topic counts as an online session.</EmptyState>
+                    : data.summary.learning > 0
+                    ? <EmptyState icon="calendar" compact title="No sessions yet" action={{ to: '/sessions', label: 'Book a session' }}>Meet your specialist face to face, or join an open session on a topic you need.</EmptyState>
                     : <EmptyState icon="calendar" compact title="No sessions yet">Once a specialist accepts you, you can book sessions with them.</EmptyState>}
               </Card>
               <Card plain title="Latest feedback">

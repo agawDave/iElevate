@@ -5,14 +5,14 @@ import AuthShell, { PillInput, authButtonClass, authErrorClass, authLinkClass } 
 
 const steps = [
   { title: 'Create your account', desc: 'As a beneficiary who wants to learn, or a specialist who teaches' },
-  { title: 'Take the skill check', desc: 'Beneficiaries find the ELEVATE topics they need; specialists pick the topics they teach' },
+  { title: 'Take the pre-assessment', desc: 'Beneficiaries find the ELEVATE topics they need; specialists pick the topics they teach' },
   { title: 'Learn with a specialist', desc: "Apply to a specialist's module, then chat, book sessions and do the activities" },
   { title: 'Earn your certificate', desc: 'Your specialist issues it, and it goes into your portfolio' },
 ];
 
 const ROLES = [
   { value: 'specialist', label: 'Specialist', desc: 'Teach topics · Create modules' },
-  { value: 'beneficiary', label: 'Beneficiary', desc: 'Skill check · Learn with a specialist' },
+  { value: 'beneficiary', label: 'Beneficiary', desc: 'Pre-assessment · Learn with a specialist' },
 ];
 
 export default function Signup() {

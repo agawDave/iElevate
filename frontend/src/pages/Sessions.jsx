@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import AppLayout from '../components/layout/AppLayout';
-import PageHeader, { HeaderStat, headerButtonClass } from '../components/layout/PageHeader';
+import PageHeader, { HeaderStat, headerButtonClass, headerPrimaryClass } from '../components/layout/PageHeader';
 import axiosClient from '../api/axiosClient';
+import { useAuth } from '../context/AuthContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { DURATIONS, SESSION_STATUS, formatSessionRange, isLink, toLocalInputValue } from '../lib/sessions';
 import { SkeletonBlock, SkeletonLines } from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
+
+// Two kinds of sessions:
+//   - face-to-face, booked here: one-on-one (one asks, the other accepts), or
+//     open (a specialist posts it, beneficiaries who need the topic join);
+//   - online, added automatically each day a beneficiary works on a module.
 
 // What this viewer can do with a session (the server decides).
 function sessionPermissions(session) {
@@ -28,46 +35,109 @@ function dayLabel(value) {
   return day.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
-// One session as an agenda row: date block, who and what, when and where, status, actions.
-function SessionRow({ session, onUpdateStatus, quiet = false }) {
+const plural = (n, word, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
+const timeOf = (value) => new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const button = 'rounded-lg px-3 py-1.5 text-sm font-medium';
+const inputClass = 'mt-1 block rounded-lg border border-stone-300 px-3 py-2 text-sm';
+const joinedText = (session) => `${session.joinedCount}${session.seats ? ` of ${session.seats}` : ''} joined`;
+
+function DateBlock({ value, quiet = false }) {
+  const date = new Date(value);
+  return (
+    <span className={`flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl ${quiet ? 'bg-stone-100 text-slate-600' : 'bg-brand-600 text-white'}`}>
+      <span className="text-xl font-extrabold leading-none">{date.getDate()}</span>
+      <span className="text-[10px] font-semibold uppercase tracking-wide">{date.toLocaleDateString([], { month: 'short' })}</span>
+    </span>
+  );
+}
+
+function PlaceLine({ place }) {
+  if (!place) return null;
+  return isLink(place)
+    ? <a href={place} target="_blank" rel="noreferrer" className="mt-0.5 inline-block max-w-full truncate text-sm text-brand-600 hover:underline">{place}</a>
+    : <p className="mt-0.5 text-sm text-slate-600">Where: {place}</p>;
+}
+
+// The specialist's view of who joined an open session; once it has started,
+// they tick who came and mark it as done.
+function AttendeeList({ session, onUpdateStatus }) {
+  const attendees = session.attendees || [];
+  const [came, setCame] = useState(() => new Set(attendees.filter((person) => person.attended !== false).map((person) => person.id)));
+  const toggle = (id) => setCame((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  if (session.canComplete) {
+    return (
+      <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 p-3">
+        <p className="text-sm font-medium text-slate-800">{attendees.length ? 'Who came? Untick anyone who didn’t.' : 'No one joined this session.'}</p>
+        {attendees.length > 0 && (
+          <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5">
+            {attendees.map((person) => (
+              <li key={person.id}>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input type="checkbox" checked={came.has(person.id)} onChange={() => toggle(person.id)} className="h-4 w-4 rounded border-stone-300 text-brand-600" />
+                  {person.name}
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" onClick={() => onUpdateStatus(session, 'completed', { attended: [...came] })} className={`${button} bg-emerald-600 text-white hover:bg-emerald-700`}>Mark as done</button>
+          <button type="button" onClick={() => onUpdateStatus(session, 'no_show')} className={`${button} text-slate-500 hover:text-red-600`}>Didn&apos;t happen</button>
+        </div>
+      </div>
+    );
+  }
+  if (session.status === 'completed') {
+    const present = attendees.filter((person) => person.attended);
+    return <p className="mt-1.5 text-sm text-slate-600">Came: {present.length ? present.map((person) => person.name).join(', ') : 'no one'} ({present.length} of {attendees.length})</p>;
+  }
+  return (
+    <p className="mt-1.5 text-sm text-slate-600">
+      {attendees.length ? `Joined: ${attendees.map((person) => person.name).join(', ')}` : 'No one has joined yet.'}
+    </p>
+  );
+}
+
+// One face-to-face session as an agenda row: date block, who and what, when and where, status, actions.
+function SessionRow({ session, onUpdateStatus, onLeave, quiet = false }) {
   const { expired, canConfirm, canCancel, canComplete } = sessionPermissions(session);
-  const status = expired
-    ? { label: 'Not answered in time', style: 'bg-stone-100 text-slate-500 border-stone-200' }
-    : session.status === 'pending' && canConfirm
-      ? { label: 'Needs your answer', style: 'bg-amber-100 text-amber-900 border-amber-300' }
-      : SESSION_STATUS[session.status] || SESSION_STATUS.pending;
-  const starts = new Date(session.startsAt);
-  const button = 'rounded-lg px-3 py-1.5 text-sm font-medium';
+  const status = session.isOpen && session.status === 'confirmed'
+    ? { label: `Open · ${joinedText(session)}`, style: 'bg-emerald-50 text-emerald-800 border-emerald-200' }
+    : expired
+      ? { label: 'Not answered in time', style: 'bg-stone-100 text-slate-500 border-stone-200' }
+      : session.status === 'pending' && canConfirm
+        ? { label: 'Needs your answer', style: 'bg-amber-100 text-amber-900 border-amber-300' }
+        : SESSION_STATUS[session.status] || SESSION_STATUS.pending;
+  const who = session.isOpen
+    ? (session.isSpecialist ? 'Open to beneficiaries who need this topic' : `with ${session.otherUserName} · open session`)
+    : `${session.isSpecialist ? 'Teaching' : 'with'} ${session.otherUserName || `User #${session.otherUserId}`}`;
 
   return (
     <li className={`flex flex-wrap items-start gap-4 rounded-2xl border bg-white p-4 ${quiet ? 'border-stone-200 opacity-80' : 'border-stone-200 shadow-sm'}`}>
-      <span className={`flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl ${quiet ? 'bg-stone-100 text-slate-600' : 'bg-brand-600 text-white'}`}>
-        <span className="text-xl font-extrabold leading-none">{starts.getDate()}</span>
-        <span className="text-[10px] font-semibold uppercase tracking-wide">{starts.toLocaleDateString([], { month: 'short' })}</span>
-      </span>
+      <DateBlock value={session.startsAt} quiet={quiet} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="font-semibold text-slate-900">
-              {session.moduleTitle}
-            </p>
-            <p className="text-sm text-slate-500">
-              {`${session.isSpecialist ? 'Teaching' : 'with'} ${session.otherUserName || `User #${session.otherUserId}`}`}
-            </p>
+            <p className="font-semibold text-slate-900">{session.moduleTitle}</p>
+            <p className="text-sm text-slate-500">{who}</p>
           </div>
           <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium ${status.style}`}>{status.label}</span>
         </div>
         <p className="mt-1.5 text-sm text-slate-700">{formatSessionRange(session.startsAt, session.endsAt)}</p>
-        {session.meetingLink && (
-          isLink(session.meetingLink)
-            ? <a href={session.meetingLink} target="_blank" rel="noreferrer" className="mt-0.5 inline-block max-w-full truncate text-sm text-brand-600 hover:underline">{session.meetingLink}</a>
-            : <p className="mt-0.5 text-sm text-slate-600">Where: {session.meetingLink}</p>
-        )}
+        <PlaceLine place={session.meetingLink} />
+
+        {session.isOpen && session.isSpecialist && <AttendeeList key={`${session.moduleSessionId}-${session.status}`} session={session} onUpdateStatus={onUpdateStatus} />}
+
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {!expired && canConfirm && (
+          {!session.isOpen && !expired && canConfirm && (
             <button type="button" onClick={() => onUpdateStatus(session, 'confirmed')} className={`${button} bg-accent-500 font-semibold text-brand-900 hover:bg-accent-550`}>Accept</button>
           )}
-          {!expired && canComplete && (
+          {!session.isOpen && !expired && canComplete && (
             <>
               <button type="button" onClick={() => onUpdateStatus(session, 'completed')} className={`${button} bg-emerald-600 text-white hover:bg-emerald-700`}>Mark as done</button>
               <button type="button" onClick={() => onUpdateStatus(session, 'no_show')} className={`${button} text-slate-500 hover:text-red-600`}>Didn&apos;t happen</button>
@@ -78,7 +148,11 @@ function SessionRow({ session, onUpdateStatus, quiet = false }) {
               {canConfirm ? 'Decline' : 'Cancel'}
             </button>
           )}
-          {!expired && session.status === 'pending' && session.scheduledByMe && <span className="text-sm text-slate-500">Waiting for them to accept…</span>}
+          {session.isOpen && session.joinedByMe && session.status === 'confirmed' && <span className="text-sm font-medium text-emerald-700">You joined</span>}
+          {session.canLeave && (
+            <button type="button" onClick={() => onLeave(session)} className={`${button} text-slate-500 hover:text-red-600`}>Leave</button>
+          )}
+          {!session.isOpen && !expired && session.status === 'pending' && session.scheduledByMe && <span className="text-sm text-slate-500">Waiting for them to accept…</span>}
           {session.conversationId && (
             <Link to={`/modules?c=${session.conversationId}`} className="ml-auto text-sm font-medium text-brand-600 hover:underline">Open chat →</Link>
           )}
@@ -88,7 +162,68 @@ function SessionRow({ session, onUpdateStatus, quiet = false }) {
   );
 }
 
+// An open face-to-face session a beneficiary can join.
+function OpenSessionRow({ session, onJoin, joining }) {
+  return (
+    <li className="flex flex-wrap items-start gap-4 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+      <DateBlock value={session.startsAt} />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="font-semibold text-slate-900">{session.moduleTitle}</p>
+            <p className="text-sm text-slate-500">with {session.specialistName}</p>
+          </div>
+          <button
+            type="button"
+            disabled={session.full || joining}
+            onClick={() => onJoin(session)}
+            className="shrink-0 rounded-lg bg-accent-500 px-4 py-1.5 text-sm font-bold text-brand-900 hover:bg-accent-550 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {session.full ? 'Full' : joining ? 'Joining…' : 'Join'}
+          </button>
+        </div>
+        <p className="mt-1.5 text-sm text-slate-700">{formatSessionRange(session.startsAt, session.endsAt)}</p>
+        <PlaceLine place={session.place} />
+        <p className="mt-1 text-xs text-slate-500">{joinedText(session)}</p>
+      </div>
+    </li>
+  );
+}
+
+// What the beneficiary did that day: "2 answers · Pre-test".
+function onlineWork(session) {
+  return [
+    session.answers > 0 && plural(session.answers, 'answer'),
+    session.preTest && 'Pre-test',
+    session.postTest && 'Post-test',
+  ].filter(Boolean).join(' · ');
+}
+
+// A day a beneficiary worked on a module online, added automatically.
+function OnlineSessionRow({ session }) {
+  const day = new Date(`${session.date}T00:00:00`);
+  const from = timeOf(session.startedAt);
+  const to = timeOf(session.endedAt);
+  return (
+    <li className="flex items-center gap-4 px-4 py-3">
+      <span className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg bg-stone-100 text-slate-700">
+        <span className="text-base font-bold leading-none">{day.getDate()}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wide">{day.toLocaleDateString([], { month: 'short' })}</span>
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="font-medium text-slate-900">{session.moduleTitle}</p>
+        <p className="text-sm text-slate-500">{session.isSpecialist ? session.otherUserName : `with ${session.otherUserName}`}</p>
+      </div>
+      <div className="text-right text-sm">
+        <p className="text-slate-700">{from === to ? from : `${from} – ${to}`}</p>
+        <p className="text-xs text-slate-500">{onlineWork(session)}</p>
+      </div>
+    </li>
+  );
+}
+
 // "Book a session" from a module chat: /sessions?moduleId=..[&learner=..]
+// A one-on-one face-to-face session.
 function BookingForm({ moduleId, learnerId, onBooked, onCancel }) {
   const [details, setDetails] = useState(null);
   const [start, setStart] = useState('');
@@ -115,6 +250,10 @@ function BookingForm({ moduleId, learnerId, onBooked, onCancel }) {
       setError('Choose a date and time.');
       return;
     }
+    if (!place.trim()) {
+      setError('Add the place where you will meet.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -133,23 +272,23 @@ function BookingForm({ moduleId, learnerId, onBooked, onCancel }) {
 
   return (
     <section className="mb-8 rounded-2xl border-2 border-brand-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wider text-accent-600">Book a session</p>
+      <p className="text-xs font-semibold uppercase tracking-wider text-accent-600">Book a face-to-face session</p>
       <h2 className="mt-1 text-lg font-semibold">{details ? `${details.title} with ${details.withName}` : <SkeletonBlock className="h-5 w-56" />}</h2>
-      <p className="mb-4 mt-1 text-sm text-slate-500">They get a notice and accept it on their Sessions page.</p>
+      <p className="mb-4 mt-1 text-sm text-slate-500">You meet in person. They get a notice and accept it on their Sessions page.</p>
       <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
         <label className="text-sm text-slate-600">
           Date and time
-          <input required type="datetime-local" min={toLocalInputValue(new Date())} value={start} onChange={(event) => setStart(event.target.value)} className="mt-1 block rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+          <input required type="datetime-local" min={toLocalInputValue(new Date())} value={start} onChange={(event) => setStart(event.target.value)} className={inputClass} />
         </label>
         <label className="text-sm text-slate-600">
           Length
-          <select value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} className="mt-1 block rounded-lg border border-stone-300 px-3 py-2 text-sm">
+          <select value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} className={inputClass}>
             {DURATIONS.map((option) => <option key={option.minutes} value={option.minutes}>{option.label}</option>)}
           </select>
         </label>
         <label className="min-w-64 flex-1 text-sm text-slate-600">
-          Where (optional)
-          <input value={place} maxLength={255} onChange={(event) => setPlace(event.target.value)} placeholder="Google Meet link, or a place like the barangay hall" className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+          Where you will meet
+          <input required value={place} maxLength={255} onChange={(event) => setPlace(event.target.value)} placeholder="Barangay hall, school, or another place" className={`${inputClass} w-full`} />
         </label>
         <button type="submit" disabled={saving} className="rounded-lg bg-accent-500 px-4 py-2.5 text-sm font-bold text-brand-900 hover:bg-accent-550 disabled:opacity-50">
           {saving ? 'Sending…' : 'Request session'}
@@ -161,32 +300,161 @@ function BookingForm({ moduleId, learnerId, onBooked, onCancel }) {
   );
 }
 
+// A specialist posts an open face-to-face session that anyone who needs the topic can join.
+function OpenSessionForm({ topics, onPosted, onCancel }) {
+  const [moduleId, setModuleId] = useState(topics.length === 1 ? String(topics[0].id) : '');
+  const [start, setStart] = useState('');
+  const [minutes, setMinutes] = useState(120);
+  const [place, setPlace] = useState('');
+  const [seats, setSeats] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    const startsAt = new Date(start);
+    if (!moduleId) return setError('Choose the topic.');
+    if (!start || Number.isNaN(startsAt.getTime())) return setError('Choose a date and time.');
+    if (!place.trim()) return setError('Add the place where you will meet.');
+    setSaving(true);
+    setError('');
+    try {
+      const response = await axiosClient.post('/sessions/open', {
+        moduleId: Number(moduleId),
+        startsAt: startsAt.toISOString(),
+        endsAt: new Date(startsAt.getTime() + minutes * 60000).toISOString(),
+        meetingLink: place.trim(),
+        seats: seats === '' ? null : Number(seats),
+      });
+      onPosted(response.data.message);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'Unable to post this session.');
+      setSaving(false);
+    }
+    return undefined;
+  }
+
+  return (
+    <section className="mb-8 rounded-2xl border-2 border-brand-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-wider text-accent-600">Open face-to-face session</p>
+      <h2 className="mt-1 text-lg font-semibold">Meet everyone who needs a topic</h2>
+      <p className="mb-4 mt-1 text-sm text-slate-500">Beneficiaries who need this topic see it on their Sessions page and can join, even if they aren&apos;t your learners yet.</p>
+      {!topics.length && <p className="text-sm text-slate-600">You don&apos;t teach any topic yet. Choose your topics in My Teaching Plan first.</p>}
+      {topics.length > 0 && (
+        <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+          <label className="text-sm text-slate-600">
+            Topic
+            <select required value={moduleId} onChange={(event) => setModuleId(event.target.value)} className={inputClass}>
+              <option value="">Choose a topic</option>
+              {topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.title}</option>)}
+            </select>
+          </label>
+          <label className="text-sm text-slate-600">
+            Date and time
+            <input required type="datetime-local" min={toLocalInputValue(new Date())} value={start} onChange={(event) => setStart(event.target.value)} className={inputClass} />
+          </label>
+          <label className="text-sm text-slate-600">
+            Length
+            <select value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} className={inputClass}>
+              {[...DURATIONS, { minutes: 180, label: '3 hours' }, { minutes: 240, label: '4 hours' }].map((option) => <option key={option.minutes} value={option.minutes}>{option.label}</option>)}
+            </select>
+          </label>
+          <label className="min-w-56 flex-1 text-sm text-slate-600">
+            Where you will meet
+            <input required value={place} maxLength={255} onChange={(event) => setPlace(event.target.value)} placeholder="Barangay hall, school, or another place" className={`${inputClass} w-full`} />
+          </label>
+          <label className="text-sm text-slate-600">
+            Seats (optional)
+            <input type="number" min={1} max={500} value={seats} onChange={(event) => setSeats(event.target.value)} placeholder="No limit" className={`${inputClass} w-28`} />
+          </label>
+          <button type="submit" disabled={saving} className="rounded-lg bg-accent-500 px-4 py-2.5 text-sm font-bold text-brand-900 hover:bg-accent-550 disabled:opacity-50">
+            {saving ? 'Posting…' : 'Post session'}
+          </button>
+          <button type="button" onClick={onCancel} className="px-2 py-2.5 text-sm text-slate-500 hover:text-slate-800">Cancel</button>
+        </form>
+      )}
+      {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
+    </section>
+  );
+}
+
 export default function Sessions() {
+  const { user } = useAuth();
+  const isSpecialist = user?.userType === 'specialist';
+  const confirm = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
   const [sessions, setSessions] = useState([]);
+  const [online, setOnline] = useState([]);
+  const [openToJoin, setOpenToJoin] = useState([]);
+  const [myTopics, setMyTopics] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [showPast, setShowPast] = useState(false);
+  const [showAllOnline, setShowAllOnline] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [joiningId, setJoiningId] = useState(null);
+  // Beneficiaries outside the Philippines learn online only (the server says so).
+  const [onlineOnly, setOnlineOnly] = useState(false);
   const bookFor = searchParams.get('moduleId');
 
   function loadSessions() {
-    axiosClient.get('/sessions/modules/me')
-      .then((response) => setSessions(response.data.data))
-      .finally(() => setLoading(false));
+    Promise.all([
+      axiosClient.get('/sessions/modules/me').then((response) => setSessions(response.data.data)),
+      axiosClient.get('/sessions/learning/me').then((response) => setOnline(response.data.data)).catch(() => setOnline([])),
+      axiosClient.get('/sessions/open').then((response) => {
+        setOpenToJoin(response.data.data.sessions);
+        setMyTopics(response.data.data.topics);
+        setOnlineOnly(Boolean(response.data.data.onlineOnly));
+      }).catch(() => setOpenToJoin([])),
+    ]).finally(() => setLoading(false));
   }
 
   useEffect(() => { loadSessions(); }, []);
 
-  async function handleUpdateStatus(session, status) {
-    setError('');
-    setNotice('');
+  const tell = (message) => { setError(''); setNotice(message || ''); };
+  const fail = (requestError, fallback) => { setNotice(''); setError(requestError.response?.data?.message || fallback); };
+
+  async function handleUpdateStatus(session, status, extra = {}) {
+    if (status === 'cancelled' && session.isOpen && session.joinedCount > 0) {
+      const ok = await confirm({
+        title: 'Cancel this session?',
+        message: `${plural(session.joinedCount, 'beneficiary', 'beneficiaries')} joined. They'll get a notice that it's cancelled.`,
+        confirmLabel: 'Cancel session',
+        cancelLabel: 'Keep it',
+        danger: true,
+      });
+      if (!ok) return;
+    }
     try {
-      const response = await axiosClient.patch(`/sessions/modules/${session.moduleSessionId}/status`, { status });
-      setNotice(response.data.message || '');
+      const response = await axiosClient.patch(`/sessions/modules/${session.moduleSessionId}/status`, { status, ...extra });
+      tell(response.data.message);
       loadSessions();
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Unable to update this session.');
+      fail(requestError, 'Unable to update this session.');
+    }
+  }
+
+  async function handleJoin(session) {
+    setJoiningId(session.moduleSessionId);
+    try {
+      const response = await axiosClient.post(`/sessions/open/${session.moduleSessionId}/join`);
+      tell(response.data.message);
+      loadSessions();
+    } catch (requestError) {
+      fail(requestError, 'Unable to join this session.');
+    } finally {
+      setJoiningId(null);
+    }
+  }
+
+  async function handleLeave(session) {
+    try {
+      const response = await axiosClient.delete(`/sessions/open/${session.moduleSessionId}/join`);
+      tell(response.data.message);
+      loadSessions();
+    } catch (requestError) {
+      fail(requestError, 'Unable to leave this session.');
     }
   }
 
@@ -209,14 +477,29 @@ export default function Sessions() {
     <AppLayout>
       <PageHeader
         title="Sessions"
-        subtitle="Every learning session across your topics. To book one, open the topic's chat in Modules and press Book a session."
-        actions={<Link to="/modules" className={headerButtonClass}>Go to Modules</Link>}
+        subtitle={isSpecialist
+          ? 'Face-to-face sessions you book or post, and the online sessions added each day a learner works on your module. Book one-on-one from a topic’s chat in Modules.'
+          : onlineOnly
+            ? 'You live outside the Philippines, so you learn online. An online session is added each day you work on a module.'
+            : 'Face-to-face sessions you book or join, and the online sessions added each day you work on a module. Book one-on-one from a topic’s chat in Modules.'}
+        actions={(
+          <>
+            {isSpecialist && <button type="button" onClick={() => setPosting(true)} className={headerPrimaryClass}>+ Open face-to-face session</button>}
+            <Link to="/modules" className={headerButtonClass}>Go to Modules</Link>
+          </>
+        )}
       >
         {!loading && (
           <div className="flex flex-wrap gap-2">
-            <HeaderStat value={upcoming.length} label="Upcoming" />
-            <HeaderStat value={needsAnswer.length} label="Need your answer" alert={needsAnswer.length > 0} />
-            <HeaderStat value={held} label="Held" />
+            {!onlineOnly && (
+              <>
+                <HeaderStat value={upcoming.length} label="Upcoming" />
+                <HeaderStat value={needsAnswer.length} label="Need your answer" alert={needsAnswer.length > 0} />
+                {!isSpecialist && <HeaderStat value={openToJoin.length} label="Open to join" alert={openToJoin.length > 0} />}
+                <HeaderStat value={held} label="Face-to-face held" />
+              </>
+            )}
+            <HeaderStat value={online.length} label="Online sessions" />
           </div>
         )}
       </PageHeader>
@@ -224,8 +507,15 @@ export default function Sessions() {
         <BookingForm
           moduleId={bookFor}
           learnerId={searchParams.get('learner')}
-          onBooked={(message) => { setNotice(message); setSearchParams({}); loadSessions(); }}
+          onBooked={(message) => { tell(message); setSearchParams({}); loadSessions(); }}
           onCancel={() => setSearchParams({})}
+        />
+      )}
+      {posting && (
+        <OpenSessionForm
+          topics={myTopics}
+          onPosted={(message) => { tell(message); setPosting(false); loadSessions(); }}
+          onCancel={() => setPosting(false)}
         />
       )}
       {notice && <p role="status" className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{notice}</p>}
@@ -241,43 +531,79 @@ export default function Sessions() {
                 Needs your answer
               </h2>
               <ul className="space-y-3">
-                {needsAnswer.map((s) => <SessionRow key={s.moduleSessionId} session={s} onUpdateStatus={handleUpdateStatus} />)}
+                {needsAnswer.map((s) => <SessionRow key={s.moduleSessionId} session={s} onUpdateStatus={handleUpdateStatus} onLeave={handleLeave} />)}
               </ul>
             </section>
           )}
 
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">Upcoming</h2>
-          {!scheduled.length && (
+          {!isSpecialist && openToJoin.length > 0 && (
+            <section className="mb-8 rounded-2xl border border-brand-200 bg-brand-50 p-4">
+              <h2 className="font-semibold text-brand-900">Open face-to-face sessions</h2>
+              <p className="mb-3 mt-0.5 text-sm text-slate-600">Posted by specialists for topics you need. Join to save your seat.</p>
+              <ul className="space-y-3">
+                {openToJoin.map((s) => <OpenSessionRow key={s.moduleSessionId} session={s} onJoin={handleJoin} joining={joiningId === s.moduleSessionId} />)}
+              </ul>
+            </section>
+          )}
+
+          {onlineOnly && (
+            <p className="mb-8 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+              Face-to-face sessions are for beneficiaries in the Philippines. You learn online: answer your topic’s activities and tests, and message your specialist in Modules.
+            </p>
+          )}
+          {!onlineOnly && <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">Upcoming face-to-face</h2>}
+          {!onlineOnly && !scheduled.length && (
             <div className="mb-8 rounded-2xl border border-stone-200 bg-white">
               {needsAnswer.length
                 ? <EmptyState icon="calendar" compact title="Nothing else scheduled yet" />
-                : <EmptyState icon="calendar" title="No upcoming sessions yet" action={{ to: '/modules', label: 'Go to your topics' }}>Book one from a topic&apos;s chat, online or face to face.</EmptyState>}
+                : isSpecialist
+                  ? <EmptyState icon="calendar" title="No upcoming face-to-face sessions">Post an open session for everyone who needs a topic, or book one-on-one from a topic&apos;s chat.</EmptyState>
+                  : <EmptyState icon="calendar" title="No upcoming face-to-face sessions" action={{ to: '/modules', label: 'Go to your topics' }}>Join an open session above, or book one-on-one from a topic&apos;s chat.</EmptyState>}
             </div>
           )}
           {days.map((day) => (
             <section key={day.label} className="mb-6">
               <h3 className="mb-2 text-sm font-semibold text-brand-600">{day.label}</h3>
               <ul className="space-y-3">
-                {day.sessions.map((s) => <SessionRow key={s.moduleSessionId} session={s} onUpdateStatus={handleUpdateStatus} />)}
+                {day.sessions.map((s) => <SessionRow key={s.moduleSessionId} session={s} onUpdateStatus={handleUpdateStatus} onLeave={handleLeave} />)}
               </ul>
             </section>
           ))}
 
           <section className="mt-8">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Online sessions ({online.length})</h2>
+            <p className="mb-3 mt-1 text-sm text-slate-500">Added automatically each day {isSpecialist ? 'a learner works on your module' : 'you work on a module'} online: answering an activity or taking a pre-test or post-test.</p>
+            {online.length
+              ? (
+                <>
+                  <ul className="divide-y divide-stone-100 rounded-2xl border border-stone-200 bg-white">
+                    {(showAllOnline ? online : online.slice(0, 8)).map((s) => <OnlineSessionRow key={s.id} session={s} />)}
+                  </ul>
+                  {online.length > 8 && (
+                    <button type="button" onClick={() => setShowAllOnline(!showAllOnline)} className="mt-2 text-sm font-medium text-brand-600 hover:underline">
+                      {showAllOnline ? 'Show fewer' : `Show all ${online.length}`}
+                    </button>
+                  )}
+                </>
+              )
+              : <p className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-slate-500">No online sessions yet. One starts the first time {isSpecialist ? 'a learner answers' : 'you answer'} an activity or takes a test in a module.</p>}
+          </section>
+
+          {(!onlineOnly || past.length > 0) && <section className="mt-8">
             <button
               type="button"
               onClick={() => setShowPast(!showPast)}
               aria-expanded={showPast}
               className="text-sm font-semibold uppercase tracking-wider text-slate-500 hover:text-brand-600"
             >
-              {showPast ? '▾' : '▸'} Past sessions ({past.length})
+              {showPast ? '▾' : '▸'} Past face-to-face sessions ({past.length})
             </button>
             {showPast && (
               past.length
-                ? <ul className="mt-3 space-y-3">{past.map((s) => <SessionRow key={s.moduleSessionId} session={s} onUpdateStatus={handleUpdateStatus} quiet />)}</ul>
-                : <p className="mt-3 text-sm text-slate-500">No past sessions yet.</p>
+                ? <ul className="mt-3 space-y-3">{past.map((s) => <SessionRow key={s.moduleSessionId} session={s} onUpdateStatus={handleUpdateStatus} onLeave={handleLeave} quiet />)}</ul>
+                : <p className="mt-3 text-sm text-slate-500">No past face-to-face sessions yet.</p>
             )}
-          </section>
+          </section>}
         </>
       )}
     </AppLayout>

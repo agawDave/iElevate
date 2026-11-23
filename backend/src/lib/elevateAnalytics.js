@@ -1,4 +1,5 @@
 const { pool } = require('../config/db');
+const { offeredOrInUseSql } = require('./programPhases');
 
 // Learner pipeline analytics (project-advisor recommendation). Every
 // learner-topic application is in exactly one status:
@@ -95,7 +96,7 @@ function weeklyTrend(pairs, buckets = weekBuckets()) {
 async function loadTopics() {
   const [rows] = await pool.query(
     `SELECT id, title, phase, sort_order FROM learning_modules
-     WHERE is_elevate_program = 1 AND approval_status = 'approved'
+     WHERE is_elevate_program = 1 AND approval_status = 'approved' AND ${offeredOrInUseSql('learning_modules')}
      ORDER BY sort_order, id`
   );
   return rows;

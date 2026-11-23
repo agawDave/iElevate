@@ -1,5 +1,6 @@
 const { pool } = require('../config/db');
 const { logActivity } = require('../lib/activityLog');
+const { recordLearningSession } = require('../lib/learningSessions');
 const { checkActivityFile, removeActivityFile, TYPE_MESSAGE } = require('../middleware/activityFileUpload');
 const { loadTestState, attemptDto, attemptReview } = require('../lib/moduleTests');
 
@@ -572,6 +573,7 @@ const answerActivity = withUpload(async (req, res) => {
          attempts = attempts + 1, submitted_at = NOW()`,
       [activity.id, req.user.id, selected, correct]
     );
+    await recordLearningSession({ moduleId: activity.module_id, beneficiaryId: req.user.id, specialistId: activity.specialist_id, answers: 1 });
     await logActivity({ userId: req.user.id, action: 'activity_answered', moduleId: activity.module_id, targetUserId: activity.specialist_id, details: correct ? 'Correct' : 'Not correct' });
     return res.json({ success: true, data: { correct } });
   }
@@ -612,6 +614,7 @@ const answerActivity = withUpload(async (req, res) => {
   );
   req.keepUpload = Boolean(req.file && file);
   await removeActivityFile(oldFile);
+  await recordLearningSession({ moduleId: activity.module_id, beneficiaryId: req.user.id, specialistId: activity.specialist_id, answers: 1 });
   const label = TYPE_LABELS[activity.activity_type].toLowerCase();
   await logActivity({ userId: req.user.id, action: 'activity_answered', moduleId: activity.module_id, targetUserId: activity.specialist_id, details: TYPE_LABELS[activity.activity_type] });
   const [[me]] = await pool.query('SELECT full_name FROM users WHERE id = ?', [req.user.id]);

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import axiosClient from '../api/axiosClient';
 import AuthShell, { PillInput, authButtonClass, authErrorClass, authLinkClass } from '../components/auth/AuthShell';
 
-const FEATURES = ['Skill check', 'Specialist-guided modules', 'Pre- and post-tests', 'Certificates & portfolio'];
+const FEATURES = ['Pre-assessment', 'Specialist-guided modules', 'Pre- and post-tests', 'Certificates & portfolio'];
 
 // The program's real size (topics, phases, hours), read from the database so
 // the numbers stay true. Nothing shows until they've loaded.
@@ -57,7 +57,7 @@ export default function Login() {
               <h2 className="text-4xl font-extrabold leading-tight mb-1 tracking-tight text-white">Learn by doing.</h2>
               <h2 className="text-4xl font-extrabold leading-tight text-accent-500 mb-4 tracking-tight">Grow by sharing.</h2>
               <p className="text-brand-100 max-w-sm mb-6">
-                Take a quick skill check, learn the ELEVATE topics you need with a specialist, and earn certificates for your portfolio.
+                Take a quick pre-assessment, learn the ELEVATE topics you need with a specialist, and earn certificates for your portfolio.
               </p>
               <div className="flex flex-wrap gap-2">
                 {FEATURES.map((t) => (

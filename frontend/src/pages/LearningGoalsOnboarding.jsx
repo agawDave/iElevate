@@ -8,14 +8,14 @@ import axiosClient from '../api/axiosClient';
 import { SkeletonLines } from '../components/ui/Skeleton';
 
 const STEPS = [
-  { key: 'skill-check', label: 'Skill check' },
+  { key: 'skill-check', label: 'Pre-assessment' },
   { key: 'results', label: 'Your topics' },
-  { key: 'circumstances', label: 'Your circumstances' },
+  { key: 'circumstances', label: 'Preferred setup' },
 ];
 
 const COPY = {
   'skill-check': {
-    title: 'ELEVATE skill check',
+    title: 'ELEVATE pre-assessment',
     intro: 'One short list for everyone: tell us your goal and how well you can do a few everyday tasks. Your answers decide which ELEVATE topics you learn and which specialist teaches you. There are no wrong answers.',
   },
   results: {
@@ -23,13 +23,13 @@ const COPY = {
     intro: 'Anything you can’t do on your own yet is a learning topic. Topics for your main goal come first, up to four at a time; the rest are next up.',
   },
   circumstances: {
-    title: 'Tell us about your circumstances',
+    title: 'Your preferred setup',
     intro: 'We match each topic with a specialist whose schedule, learning mode, and location fit yours, so you don’t have to choose one yourself.',
   },
 };
 
-// ELEVATE profiling: the skill check decides what the beneficiary learns, and
-// their circumstances decide which specialist teaches each topic.
+// ELEVATE profiling: the pre-assessment (skill check) decides what the beneficiary
+// learns, and their preferred setup decides which specialist teaches each topic.
 export default function LearningGoalsOnboarding() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -68,9 +68,8 @@ export default function LearningGoalsOnboarding() {
           {STEPS.map((item, index) => (
             <li
               key={item.key}
-              className={`flex items-center gap-2 rounded-full px-3 py-1.5 ${index === stepIndex ? 'bg-brand-600 text-white' : index < stepIndex ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-slate-500'}`}
+              className={`flex items-center rounded-full px-3 py-1.5 ${index === stepIndex ? 'bg-brand-600 text-white' : index < stepIndex ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-slate-500'}`}
             >
-              <span>{index + 1}</span>
               {item.label}
             </li>
           ))}
@@ -118,7 +117,7 @@ export default function LearningGoalsOnboarding() {
                 onClick={() => setStep('skill-check')}
                 className="mt-4 text-sm text-slate-500 hover:text-brand-600"
               >
-                ← Retake the skill check
+                ← Retake the pre-assessment
               </button>
             </>
           )}

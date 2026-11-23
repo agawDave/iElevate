@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import AppLayout from '../../components/layout/AppLayout';
 import axiosClient from '../../api/axiosClient';
 import { AdminHeader, DetailPanel, DirectoryTable, HeaderTabs, Pagination, PersonCell, SearchBox, formatDate, useDirectory } from '../../components/admin/Directory';
+import ModulesTabs from '../../components/admin/ModulesTabs';
 import { SkeletonLines } from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
 import LineIcon from '../../components/ui/LineIcon';
@@ -115,8 +115,8 @@ function ModuleReview({ moduleId, onReviewed }) {
   );
 }
 
-// Module approval: the modules specialists create for ELEVATE topics, waiting
-// for the admin, approved, or sent back with a note.
+// Modules → Approval: the modules specialists create for ELEVATE topics,
+// waiting for the admin, approved, or sent back with a note.
 export default function AdminModules() {
   const { rows, pagination, extra, loading, error, params, setParam, setParams, reload } = useDirectory('/admin/modules', { status: 'pending' });
   const [openId, setOpenId] = useState(null);
@@ -152,20 +152,19 @@ export default function AdminModules() {
   ];
 
   return (
-    <AppLayout>
+    <>
       <AdminHeader
-        title="Module approval"
+        title="Modules"
         meta="Modules specialists create for the ELEVATE topics. Beneficiaries can apply once you approve one."
-        tabs={(
-          <HeaderTabs
-            label="Review status"
-            value={params.status}
-            onChange={(value) => setParams({ status: value })}
-            tabs={TABS.map((tab) => ({ ...tab, count: counts[tab.value] ?? 0, alert: tab.value === 'pending' && counts.pending > 0 }))}
-          />
-        )}
+        below={<ModulesTabs />}
       >
         <SearchBox value={params.q} onChange={(value) => setParam('q', value)} placeholder="Module, topic or specialist…" label="Search modules" />
+        <HeaderTabs
+          label="Review status"
+          value={params.status}
+          onChange={(value) => setParams({ status: value })}
+          tabs={TABS.map((tab) => ({ ...tab, count: counts[tab.value] ?? 0, alert: tab.value === 'pending' && counts.pending > 0 }))}
+        />
       </AdminHeader>
 
       {notice && <p role="status" className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
@@ -195,6 +194,6 @@ export default function AdminModules() {
       <DetailPanel open={Boolean(openId)} title="Module" onClose={close}>
         {openId && <ModuleReview moduleId={openId} onReviewed={reviewed} />}
       </DetailPanel>
-    </AppLayout>
+    </>
   );
 }

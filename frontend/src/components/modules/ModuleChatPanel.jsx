@@ -197,7 +197,7 @@ export default function ModuleChatPanel({ conversation, module, isSpecialist, on
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
           {onViewProfile && <button type="button" onClick={onViewProfile} className={outline}>Profile</button>}
           <button type="button" onClick={onOpenMaterials} className={outline}>Materials</button>
-          {!completed && <Link to={bookLink} className={outline}>Book a session</Link>}
+          {!completed && !conversation.learnerOnlineOnly && <Link to={bookLink} className={outline}>Book a session</Link>}
           {!isSpecialist && completed && conversation.certificateHasFile && (
             <button type="button" onClick={viewCertificate} className={`${button} bg-emerald-600 text-white hover:bg-emerald-700`}>View your certificate</button>
           )}
@@ -226,7 +226,7 @@ export default function ModuleChatPanel({ conversation, module, isSpecialist, on
           <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-brand-600">About {firstName}</summary>
           <div className="mt-2 space-y-1.5 pb-1">
             {conversation.learnerBand && (
-              <p className="text-slate-700"><span className="font-semibold">Skill check level for this topic:</span> {BAND_LABELS[conversation.learnerBand] || conversation.learnerBand}</p>
+              <p className="text-slate-700"><span className="font-semibold">Pre-assessment level for this topic:</span> {BAND_LABELS[conversation.learnerBand] || conversation.learnerBand}</p>
             )}
             {conversation.learnerNotes && (
               <p className="whitespace-pre-line text-slate-700"><span className="font-semibold">They told us:</span> {conversation.learnerNotes}</p>

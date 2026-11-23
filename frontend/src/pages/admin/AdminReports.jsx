@@ -4,7 +4,7 @@ import AppLayout from '../../components/layout/AppLayout';
 import { HeaderStat, headerPrimaryClass } from '../../components/layout/PageHeader';
 import { AdminHeader, MoreFilters, clearButtonClass, filterInputClass, filterLabelClass } from '../../components/admin/Directory';
 import axiosClient from '../../api/axiosClient';
-import { PIPELINE_SERIES, StackedTopicBars, WeeklyTrendChart } from '../../components/charts/PipelineCharts';
+import { StackedTopicBars, WeeklyTrendChart } from '../../components/charts/PipelineCharts';
 import { BAND_LABELS, SECTOR_LABELS, SEX_LABELS } from '../../lib/profileLabels';
 import { csvDate, downloadCsv } from '../../lib/csv';
 
@@ -13,11 +13,15 @@ import { csvDate, downloadCsv } from '../../lib/csv';
 const PARTICIPATION_SERIES = [
   { key: 'logins', label: 'Logins', color: '#6250d6' },
   { key: 'messages', label: 'Messages', color: '#eda100' },
-  { key: 'activities', label: 'Activities answered', color: '#e87ba4' },
+  { key: 'activities', label: 'Module answers', color: '#e87ba4' },
+  { key: 'sessions', label: 'Online sessions', color: '#2a78d6' },
+  { key: 'faceToFace', label: 'Face-to-face attended', color: '#eb6834' },
+  { key: 'certificates', label: 'Completed modules', color: '#1baf7a' },
 ];
 const COMPLETED_SERIES = [
   { key: 'certificates', label: 'Certificates issued', color: '#1baf7a' },
-  { key: 'sessions', label: 'Sessions held', color: '#6250d6' },
+  { key: 'sessions', label: 'Online sessions', color: '#6250d6' },
+  { key: 'faceToFace', label: 'Face-to-face sessions', color: '#eda100' },
 ];
 const PRESETS = [
   { key: '7d', label: 'Last 7 days' },
@@ -29,6 +33,40 @@ const PRESETS = [
   { key: 'custom', label: 'Custom dates' },
 ];
 const STAGE_LABELS = { incoming: 'Incoming', ongoing: 'Ongoing', completed: 'Completed' };
+// What happened with each topic in the period (the Progress chart).
+const PERIOD_SERIES = [
+  { key: 'applied', label: 'Applied', color: '#eb6834' },
+  { key: 'accepted', label: 'Accepted', color: '#2a78d6' },
+  { key: 'completed', label: 'Completed', color: '#1baf7a' },
+  { key: 'preTests', label: 'Pre-test', color: '#eda100' },
+  { key: 'postTests', label: 'Post-test', color: '#6250d6' },
+];
+const TEST_LABELS = { pre: 'Pre-test', post: 'Post-test' };
+const count = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const percent = (value) => (value === null || value === undefined ? '—' : `${value}%`);
+
+// A learner's topic in the period, in a few words: "Accepted · 3 answers · Pre-test".
+function periodText(period) {
+  return [
+    period.applied && 'Applied',
+    period.accepted && 'Accepted',
+    period.completed && 'Completed',
+    period.answers && `${period.answers} answer${period.answers === 1 ? '' : 's'}`,
+    ...period.tests.map((kind) => TEST_LABELS[kind]),
+    period.sessions && `${period.sessions} online session${period.sessions === 1 ? '' : 's'}`,
+    period.faceToFace && `${period.faceToFace} face-to-face`,
+  ].filter(Boolean).join(' · ');
+}
+
+function TestStat({ label, value, note }) {
+  return (
+    <div className="rounded-xl border border-stone-200 px-4 py-3">
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className="mt-0.5 text-xl font-bold tabular-nums text-slate-900">{value}</p>
+      {note && <p className="text-xs text-slate-500">{note}</p>}
+    </div>
+  );
+}
 const AGE_ORDER = ['24 and under', '25–34', '35–44', '45 and over', 'Not given'];
 
 function iso(date) {
@@ -196,7 +234,8 @@ export default function AdminReports() {
     { label: 'Applications', value: summary.applications },
     { label: 'Accepted', value: summary.accepted },
     { label: 'Completed (certificates)', value: summary.certificates },
-    { label: 'Sessions held', value: summary.sessionsHeld, note: `${summary.sessionsBooked} requested` },
+    { label: 'Online sessions', value: summary.onlineSessions },
+    { label: 'Face-to-face sessions', value: summary.faceToFaceHeld, note: `${count(summary.faceToFaceAttendance, 'attendee')}` },
   ] : [];
 
   return (
@@ -291,7 +330,7 @@ export default function AdminReports() {
 
           <Section
             title="Participation"
-            subtitle={`How actively beneficiaries took part: ${summary.logins} logins, ${summary.messages} chat messages with their specialists (both sides) and ${summary.activitiesAnswered} activity answers in this period.`}
+            subtitle={`How actively beneficiaries took part in this period: ${count(summary.logins, 'login')}, ${count(summary.messages, 'chat message')} with their specialists (both sides), ${count(summary.activitiesAnswered, 'module answer')}, ${count(summary.onlineSessions, 'online session')}, ${count(summary.faceToFaceAttendance, 'face-to-face session')} attended, and ${count(summary.certificates, 'completed module')} (certificates).`}
             actions={(
               <CsvButton onClick={() => downloadCsv(`${fileStem}-participation.csv`, report.participation.learners, [
                 { label: 'Beneficiary', value: (row) => row.name },
@@ -303,10 +342,11 @@ export default function AdminReports() {
                 { label: 'Sectors', value: (row) => row.sectors.map((sector) => SECTOR_LABELS[sector] || sector).join('; ') },
                 { label: 'Logins', value: (row) => row.logins },
                 { label: 'Messages sent', value: (row) => row.messages },
-                { label: 'Activities answered', value: (row) => row.activities },
-                { label: 'Sessions held', value: (row) => row.sessions },
+                { label: 'Module answers', value: (row) => row.activities },
+                { label: 'Online sessions', value: (row) => row.sessions },
+                { label: 'Face-to-face sessions attended', value: (row) => row.faceToFace },
                 { label: 'Applications', value: (row) => row.applications },
-                { label: 'Certificates', value: (row) => row.certificates },
+                { label: 'Completed modules (certificates)', value: (row) => row.certificates },
                 { label: 'Last active', value: (row) => csvDate(row.lastActiveAt) },
               ])}
               />
@@ -328,17 +368,18 @@ export default function AdminReports() {
                 { label: 'Beneficiary', render: (row) => <><p className="font-medium text-slate-900">{row.name}</p><p className="text-xs text-slate-500">{[row.barangay && `Brgy. ${row.barangay}`, row.city].filter(Boolean).join(', ')}</p></> },
                 { label: 'Logins', align: 'right', render: (row) => row.logins },
                 { label: 'Messages sent', align: 'right', render: (row) => row.messages },
-                { label: 'Activities', align: 'right', render: (row) => row.activities },
-                { label: 'Sessions', align: 'right', render: (row) => row.sessions },
-                { label: 'Certificates', align: 'right', render: (row) => row.certificates },
+                { label: 'Module answers', align: 'right', render: (row) => row.activities },
+                { label: 'Online', align: 'right', render: (row) => row.sessions },
+                { label: 'Face-to-face', align: 'right', render: (row) => row.faceToFace },
+                { label: 'Completed modules', align: 'right', render: (row) => row.certificates },
                 { label: 'Last active', render: (row) => shortDate(row.lastActiveAt) },
               ]}
             />
           </Section>
 
           <Section
-            title="Progress"
-            subtitle="Where every beneficiary stands today on each topic (not limited to the period): applied, learning, or completed, with activity progress, topic pre-test and post-test scores, and skill-check levels."
+            title={`Progress · ${longDate(range.from)} to ${longDate(range.to)}`}
+            subtitle="What happened with each topic in this period: applications, acceptances, completions, pre-tests and post-tests, module answers, and online and face-to-face sessions. “Stage” is where the beneficiary stands today."
             actions={(
               <CsvButton onClick={() => downloadCsv(`${fileStem}-progress.csv`, report.progress.learners, [
                 { label: 'Beneficiary', value: (row) => row.learner },
@@ -346,12 +387,13 @@ export default function AdminReports() {
                 { label: 'Phase', value: (row) => row.phase },
                 { label: 'Specialist', value: (row) => row.specialist },
                 { label: 'Stage', value: (row) => STAGE_LABELS[row.stage] },
+                { label: 'In this period', value: (row) => periodText(row.period) },
                 { label: 'Activities done', value: (row) => row.activitiesDone },
                 { label: 'Activities total', value: (row) => row.activitiesTotal },
                 { label: 'Pre-test score', value: (row) => (row.preTest ? `${row.preTest.score}/${row.preTest.total}` : '') },
                 { label: 'Post-test score', value: (row) => (row.postTest ? `${row.postTest.score}/${row.postTest.total}` : '') },
-                { label: 'Skill check before', value: (row) => BAND_LABELS[row.preBand] || '' },
-                { label: 'Skill check after', value: (row) => BAND_LABELS[row.postBand] || '' },
+                { label: 'Pre-assessment before', value: (row) => BAND_LABELS[row.preBand] || '' },
+                { label: 'Pre-assessment after', value: (row) => BAND_LABELS[row.postBand] || '' },
                 { label: 'Applied', value: (row) => csvDate(row.appliedAt) },
                 { label: 'Accepted', value: (row) => csvDate(row.acceptedAt) },
                 { label: 'Completed', value: (row) => csvDate(row.completedAt) },
@@ -360,33 +402,77 @@ export default function AdminReports() {
             )}
           >
             <div className="mb-1 flex flex-wrap gap-4 text-xs text-slate-600">
-              {PIPELINE_SERIES.map((item) => (
+              {PERIOD_SERIES.map((item) => (
                 <span key={item.key} className="flex items-center gap-1.5">
                   <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: item.color }} aria-hidden="true" />
                   {item.label}
                 </span>
               ))}
             </div>
-            <StackedTopicBars rows={report.progress.byTopic} series={PIPELINE_SERIES} visible={PIPELINE_SERIES.map((item) => item.key)} emptyText="No topics match these filters." />
+            <StackedTopicBars rows={report.progress.byTopic} series={PERIOD_SERIES} visible={PERIOD_SERIES.map((item) => item.key)} emptyText="No topics match these filters." />
             <h3 className="mb-2 mt-6 text-sm font-semibold text-slate-800">Each beneficiary and topic</h3>
             <ReportTable
               rows={report.progress.learners.map((row) => ({ ...row, key: `${row.moduleId}-${row.learnerId}` }))}
-              emptyText="No applications or learners match these filters."
+              emptyText="No beneficiary did anything with a topic in this period."
               columns={[
                 { label: 'Beneficiary', render: (row) => row.learner },
                 { label: 'Topic', render: (row) => row.topic },
                 { label: 'Specialist', render: (row) => row.specialist || '—' },
                 { label: 'Stage', render: (row) => STAGE_LABELS[row.stage] },
+                { label: 'In this period', render: (row) => <span className="text-xs text-slate-600">{periodText(row.period)}</span> },
                 { label: 'Activities', align: 'right', render: (row) => (row.activitiesTotal ? `${row.activitiesDone}/${row.activitiesTotal}` : '—') },
                 { label: 'Topic test', align: 'right', render: (row) => (row.preTest ? `${row.preTest.score}/${row.preTest.total} → ${row.postTest ? `${row.postTest.score}/${row.postTest.total}` : '—'}` : '—') },
-                { label: 'Skill check', render: (row) => (row.preBand ? `${BAND_LABELS[row.preBand]}${row.postBand ? ` → ${BAND_LABELS[row.postBand]}` : ''}` : '—') },
+                { label: 'Pre-assessment', render: (row) => (row.preBand ? `${BAND_LABELS[row.preBand]}${row.postBand ? ` → ${BAND_LABELS[row.postBand]}` : ''}` : '—') },
               ]}
             />
+
+            <div className="mt-8 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-slate-800">Pre-test and post-test</h3>
+              <CsvButton onClick={() => downloadCsv(`${fileStem}-tests.csv`, report.progress.tests.attempts, [
+                { label: 'Taken', value: (row) => csvDate(row.takenAt) },
+                { label: 'Beneficiary', value: (row) => row.learner },
+                { label: 'Topic', value: (row) => row.topic },
+                { label: 'Test', value: (row) => TEST_LABELS[row.kind] },
+                { label: 'Score', value: (row) => row.score },
+                { label: 'Out of', value: (row) => row.total },
+                { label: '% correct', value: (row) => row.percent },
+              ])}
+              >
+                Tests CSV
+              </CsvButton>
+            </div>
+            <p className="mb-3 mt-1 text-xs text-slate-500">Topic tests taken in this period, as % correct. “Took both” compares each post-test taken in this period with the same beneficiary’s pre-test.</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <TestStat label="Pre-tests taken" value={report.progress.tests.preTaken} note={`average ${percent(report.progress.tests.preAverage)}`} />
+              <TestStat label="Post-tests taken" value={report.progress.tests.postTaken} note={`average ${percent(report.progress.tests.postAverage)}`} />
+              <TestStat
+                label="Took both: pre → post"
+                value={report.progress.tests.both ? `${percent(report.progress.tests.bothPreAverage)} → ${percent(report.progress.tests.bothPostAverage)}` : '—'}
+                note={report.progress.tests.both
+                  ? `${report.progress.tests.both} ${report.progress.tests.both === 1 ? 'beneficiary' : 'beneficiaries'} · ${report.progress.tests.bothPostAverage - report.progress.tests.bothPreAverage >= 0 ? '+' : ''}${report.progress.tests.bothPostAverage - report.progress.tests.bothPreAverage} points`
+                  : 'No post-tests in this period'}
+              />
+              <TestStat label="Improved" value={report.progress.tests.both ? `${report.progress.tests.improved} of ${report.progress.tests.both}` : '—'} note="scored higher on the post-test" />
+            </div>
+            <div className="mt-4">
+              <ReportTable
+                rows={report.progress.tests.byTopic.map((row) => ({ ...row, key: row.moduleId }))}
+                emptyText="No topic tests were taken in this period."
+                columns={[
+                  { label: 'Topic', render: (row) => <><p className="text-slate-900">{row.title}</p><p className="text-xs text-slate-500">{row.phase}</p></> },
+                  { label: 'Pre-tests', align: 'right', render: (row) => row.preTaken },
+                  { label: 'Avg pre-test', align: 'right', render: (row) => percent(row.preAverage) },
+                  { label: 'Post-tests', align: 'right', render: (row) => row.postTaken },
+                  { label: 'Avg post-test', align: 'right', render: (row) => percent(row.postAverage) },
+                  { label: 'Took both: pre → post', align: 'right', render: (row) => (row.both ? <><span className="font-semibold">{percent(row.bothPreAverage)} → {percent(row.bothPostAverage)}</span><span className="block text-xs text-slate-500">{row.both} took both · {row.improved} improved</span></> : '—') },
+                ]}
+              />
+            </div>
           </Section>
 
           <Section
             title="Completed engagements"
-            subtitle={`Finished work in this period: ${summary.certificates} certificates issued and ${summary.sessionsHeld} learning sessions held.`}
+            subtitle={`Finished work in this period: ${count(summary.certificates, 'module')} completed (certificates issued), ${count(summary.moduleAnswers, 'module answer')} sent, ${count(summary.onlineSessions, 'online session')}, and ${count(summary.faceToFaceHeld, 'face-to-face session')} held (${count(summary.faceToFaceAttendance, 'attendee')}). An online session is a day a beneficiary worked on a module online (answers, topic tests); face-to-face sessions are booked one-on-one or posted by a specialist for anyone who needs the topic.`}
             actions={(
               <>
                 <CsvButton onClick={() => downloadCsv(`${fileStem}-certificates.csv`, report.completed.certificates, [
@@ -403,7 +489,8 @@ export default function AdminReports() {
                   { label: 'Specialist', value: (row) => row.name },
                   { label: 'Learners accepted', value: (row) => row.accepted },
                   { label: 'Certificates issued', value: (row) => row.certificates },
-                  { label: 'Sessions held', value: (row) => row.sessions },
+                  { label: 'Online sessions', value: (row) => row.sessions },
+                  { label: 'Face-to-face sessions held', value: (row) => row.faceToFace },
                   { label: 'Average days to complete', value: (row) => row.averageDays },
                 ])}
                 >
@@ -420,8 +507,10 @@ export default function AdminReports() {
                   rows={report.completed.byTopic.map((row) => ({ ...row, key: row.moduleId }))}
                   columns={[
                     { label: 'Topic', render: (row) => row.title },
-                    { label: 'Certificates', align: 'right', render: (row) => row.certificates },
-                    { label: 'Sessions', align: 'right', render: (row) => row.sessions },
+                    { label: 'Completed', align: 'right', render: (row) => row.certificates },
+                    { label: 'Answers', align: 'right', render: (row) => row.answers },
+                    { label: 'Online', align: 'right', render: (row) => row.sessions },
+                    { label: 'Face-to-face', align: 'right', render: (row) => row.faceToFace },
                     { label: 'Avg days', align: 'right', render: (row) => (row.averageDays === null ? '—' : row.averageDays) },
                   ]}
                 />
@@ -434,7 +523,8 @@ export default function AdminReports() {
                     { label: 'Specialist', render: (row) => row.name },
                     { label: 'Accepted', align: 'right', render: (row) => row.accepted },
                     { label: 'Certificates', align: 'right', render: (row) => row.certificates },
-                    { label: 'Sessions', align: 'right', render: (row) => row.sessions },
+                    { label: 'Online', align: 'right', render: (row) => row.sessions },
+                    { label: 'Face-to-face', align: 'right', render: (row) => row.faceToFace },
                     { label: 'Avg days', align: 'right', render: (row) => (row.averageDays === null ? '—' : row.averageDays) },
                   ]}
                 />

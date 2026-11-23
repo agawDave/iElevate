@@ -221,7 +221,7 @@ function LearnerCard({ module, conversation, stage, options, progress, applyingT
               {waiting && <ReplyDot label={`${specialistFirst} is waiting for your reply`} />}
             </button>
           )}
-          {stage === 'ongoing' && <Link to={`/sessions?moduleId=${module.id}`} className={buttonStyles.small}>Book a session</Link>}
+          {stage === 'ongoing' && !conversation?.learnerOnlineOnly && <Link to={`/sessions?moduleId=${module.id}`} className={buttonStyles.small}>Book a session</Link>}
           <button type="button" onClick={() => onMaterials(module.id)} className={buttonStyles.small}>Materials</button>
         </span>
       </div>
@@ -606,7 +606,7 @@ export default function Modules() {
     ) : (
       <EmptyCard>
         {!modules.length
-          ? <EmptyState icon="brand" primary title="Your topics come from your skill check" action={{ label: 'Retake the skill check', onClick: () => navigate('/onboarding/learning-goals?retake=1') }}>Take it again and we&apos;ll suggest the ELEVATE topics that fit you.</EmptyState>
+          ? <EmptyState icon="brand" primary title="Your topics come from your pre-assessment" action={{ label: 'Retake the pre-assessment', onClick: () => navigate('/onboarding/learning-goals?retake=1') }}>Take it again and we&apos;ll suggest the ELEVATE topics that fit you.</EmptyState>
           : {
             incoming: <EmptyState icon="inbox" title="No applications waiting" action={{ label: 'See all topics', onClick: () => setParams({ tab: '' }) }}>Apply to a topic under All topics, and it waits here until the specialist accepts.</EmptyState>,
             ongoing: <EmptyState icon="book" title="No topics in progress yet">Once a specialist accepts your application, the topic shows here.</EmptyState>,
@@ -669,7 +669,7 @@ export default function Modules() {
                     </>
                   )}
                 >
-                  <p>Applied {formatDay(item.appliedAt)}{item.place ? ` · ${item.place}` : ''}{item.band ? ` · Skill check: ${BAND_LABELS[item.band] || item.band}` : ''}</p>
+                  <p>Applied {formatDay(item.appliedAt)}{item.place ? ` · ${item.place}` : ''}{item.band ? ` · Pre-assessment: ${BAND_LABELS[item.band] || item.band}` : ''}</p>
                   {item.notes && <p className="mt-0.5 line-clamp-2 italic text-slate-600">&ldquo;{item.notes}&rdquo;</p>}
                 </LearnerRow>
               );

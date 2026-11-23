@@ -228,7 +228,7 @@ export default function Profile() {
       <PageHeader
         eyebrow="Account"
         title="My Profile"
-        subtitle={`Your personal details. Your skill check, topics and circumstances are on ${isBeneficiary ? 'My Learning Plan' : 'My Teaching Plan'}.`}
+        subtitle={isBeneficiary ? 'Your personal details. Your pre-assessment, topics and preferred setup are on My Learning Plan.' : 'Your personal details. Your topics and preferred setup are on My Teaching Plan.'}
         actions={<Link to="/learning-plan" className={headerButtonClass}>{isBeneficiary ? 'My Learning Plan' : 'My Teaching Plan'} →</Link>}
       />
 

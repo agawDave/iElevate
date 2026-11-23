@@ -124,13 +124,13 @@ export function AdminHeader({ title, meta, tabs, actions, below, children }) {
 }
 
 // Tabs in the admin header, each with its count: [{ value, label, count, alert? }].
-export function HeaderTabs({ label, tabs, value, onChange }) {
+export function HeaderTabs({ label, tabs, value, onChange, compact = true }) {
   return (
     <div role="tablist" aria-label={label} className="flex flex-wrap gap-2">
       {tabs.map((tab) => (
         <HeaderStat
           key={tab.value || 'all'}
-          compact
+          compact={compact}
           value={tab.count === undefined ? '—' : Number(tab.count).toLocaleString()}
           label={tab.label}
           selected={(value || '') === tab.value}

@@ -77,7 +77,7 @@ function BeneficiaryDetail({ id }) {
         <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-accent-600">Learning plan</h3>
         <dl>
           <DetailRow label="Main goal">{GOAL_LABELS[data.goal_track]}</DetailRow>
-          <DetailRow label="Skill check taken">{formatDate(data.skill_check_at)}</DetailRow>
+          <DetailRow label="Pre-assessment taken">{formatDate(data.skill_check_at)}</DetailRow>
           <DetailRow label="Device / internet">{[data.device_access, data.internet_access].filter(Boolean).join(' · ')}</DetailRow>
           <DetailRow label="Learning modes">{data.learning_modes.join(', ').replace(/_/g, '-')}</DetailRow>
           <DetailRow label="Told us">{data.notes && <span className="whitespace-pre-line">{data.notes}</span>}</DetailRow>

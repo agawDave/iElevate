@@ -26,7 +26,7 @@ const GROUPS = [
     key: 'next_up',
     outcomes: ['next_up'],
     title: 'Next up',
-    hint: 'These start as you finish your current topics. Retake the skill check after training to move them up.',
+    hint: 'These start as you finish your current topics. Retake the pre-assessment after training to move them up.',
   },
   {
     key: 'done',
@@ -46,7 +46,7 @@ function AnswerNote({ level }) {
 
 export default function SkillCheckResults({ results }) {
   if (!results?.length) {
-    return <p className="text-sm text-slate-500">No skill-check results yet.</p>;
+    return <p className="text-sm text-slate-500">No pre-assessment results yet.</p>;
   }
 
   return (

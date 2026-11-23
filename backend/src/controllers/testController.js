@@ -1,5 +1,6 @@
 const { pool } = require('../config/db');
 const { logActivity } = require('../lib/activityLog');
+const { recordLearningSession } = require('../lib/learningSessions');
 const { loadTestState, loadActivityProgress, attemptDto, parseJson } = require('../lib/moduleTests');
 const { canAuthor, learnerAssignment, notify } = require('./activityController');
 
@@ -170,6 +171,9 @@ async function takeTest(req, res) {
     if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ success: false, message: `You already took the ${KIND_LABELS[kind].toLowerCase()}.` });
     throw error;
   }
+  await recordLearningSession({
+    moduleId: assignment.id, beneficiaryId: req.user.id, specialistId: assignment.specialist_id, preTest: kind === 'pre', postTest: kind === 'post',
+  });
   await logActivity({ userId: req.user.id, action: 'module_test', moduleId: assignment.id, targetUserId: assignment.specialist_id, details: `${KIND_LABELS[kind]} · ${score} of ${total}` });
   const [[me]] = await pool.query('SELECT full_name FROM users WHERE id = ?', [req.user.id]);
   const before = kind === 'post' && state.pre ? ` (pre-test: ${state.pre.score} of ${state.pre.total})` : '';

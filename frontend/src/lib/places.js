@@ -24,6 +24,13 @@ export const PH_REGIONS = [
 
 export const PHILIPPINES = 'Philippines';
 
+// Beneficiaries outside the Philippines learn online only: face-to-face
+// sessions and radio lessons are local to the program. No country = local.
+export function livesAbroad(country) {
+  const value = typeof country === 'string' ? country.trim().toLowerCase() : '';
+  return Boolean(value) && value !== PHILIPPINES.toLowerCase();
+}
+
 export function regionName(code) {
   return PH_REGIONS.find((region) => region.code === code)?.name || '';
 }

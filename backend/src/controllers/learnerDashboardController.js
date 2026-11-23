@@ -1,12 +1,14 @@
 const { pool } = require('../config/db');
 const { loadInbox } = require('../lib/conversationInbox');
+const { offeredSql } = require('../lib/programPhases');
+const { livesAbroad } = require('../lib/places');
 
 // The beneficiary's dashboard: their numbers, their topics with progress,
 // upcoming sessions and the latest replies from specialists.
 
 async function learnerDashboard(req, res) {
   const me = req.user.id;
-  const [[user]] = await pool.query('SELECT user_type, role FROM users WHERE id = ?', [me]);
+  const [[user]] = await pool.query('SELECT user_type, role, country FROM users WHERE id = ?', [me]);
   if (!user || ['admin', 'moderator'].includes(user.role)) {
     return res.status(403).json({ success: false, message: 'Admins use the admin overview.' });
   }
@@ -59,9 +61,10 @@ async function learnerDashboard(req, res) {
        FROM module_sessions ms
        JOIN learning_modules lm ON lm.id = ms.module_id
        JOIN users s ON s.id = ms.specialist_id
-       WHERE ms.beneficiary_id = ? AND ms.status IN ('pending', 'confirmed') AND ms.ends_at > NOW()
+       WHERE (ms.beneficiary_id = ? OR EXISTS (SELECT 1 FROM module_session_attendees sa WHERE sa.session_id = ms.id AND sa.beneficiary_id = ?))
+         AND ms.status IN ('pending', 'confirmed') AND ms.ends_at > NOW()
        ORDER BY ms.starts_at
-       LIMIT 3`, [me]),
+       LIMIT 3`, [me, me]),
   ]);
 
   const activityBy = new Map(activityCounts.map((row) => [Number(row.module_id), { done: Number(row.done) || 0, total: Number(row.total) || 0 }]));
@@ -127,6 +130,8 @@ async function learnerDashboard(req, res) {
         hoursCompleted: completed.reduce((sum, topic) => sum + (topic.hours || 0), 0),
         applied: topics.filter((topic) => topic.stage === 'applied').length,
         canApply,
+        // Outside the Philippines: online only, so no face-to-face booking.
+        onlineOnly: livesAbroad(user.country),
       },
       topics,
       sessions: upcoming,
@@ -171,14 +176,16 @@ async function specialistDashboard(req, res) {
        GROUP BY act.module_id, ans.beneficiary_id`, [me]),
     q('SELECT module_id, COUNT(*) AS n FROM module_test_questions WHERE specialist_id = ? GROUP BY module_id', [me]),
     q('SELECT module_id, beneficiary_id, test_kind, score, total FROM module_test_attempts WHERE specialist_id = ?', [me]),
-    q(`SELECT ms.id, ms.module_id, ms.starts_at, ms.ends_at, ms.status, ms.scheduled_by, lm.title AS topic, b.full_name AS learner
+    q(`SELECT ms.id, ms.module_id, ms.starts_at, ms.ends_at, ms.status, ms.scheduled_by, lm.title AS topic,
+              COALESCE(b.full_name, CONCAT('Open session · ', (SELECT COUNT(*) FROM module_session_attendees sa WHERE sa.session_id = ms.id), ' joined')) AS learner
        FROM module_sessions ms
        JOIN learning_modules lm ON lm.id = ms.module_id
-       JOIN users b ON b.id = ms.beneficiary_id
+       LEFT JOIN users b ON b.id = ms.beneficiary_id
        WHERE ms.specialist_id = ? AND ms.status IN ('pending', 'confirmed') AND ms.ends_at > NOW()
        ORDER BY ms.starts_at
        LIMIT 3`, [me]),
-    q("SELECT COUNT(*) AS n FROM module_sessions WHERE specialist_id = ? AND status = 'completed'", [me]),
+    q(`SELECT (SELECT COUNT(*) FROM learning_sessions WHERE specialist_id = ?) AS online,
+              (SELECT COUNT(*) FROM module_sessions WHERE specialist_id = ? AND status = 'completed') AS face_to_face`, [me, me]),
     q('SELECT COUNT(*) AS n FROM module_certificates WHERE issued_by = ?', [me]),
     // The topics they teach (and any topic where they still have learners).
     q(`SELECT DISTINCT lm.id, lm.slug, lm.title, lm.phase, lm.sort_order,
@@ -188,7 +195,7 @@ async function specialistDashboard(req, res) {
        FROM learning_modules lm
        WHERE lm.is_elevate_program = 1 AND lm.approval_status = 'approved' AND (
          EXISTS (SELECT 1 FROM module_skills ms JOIN user_skills us ON us.skill_id = ms.skill_id AND us.relation_type = 'teaches' AND us.user_id = ?
-                 WHERE ms.module_id = lm.id AND ms.is_primary = 1)
+                 WHERE ms.module_id = lm.id AND ms.is_primary = 1 AND ${offeredSql('lm')})
          OR EXISTS (SELECT 1 FROM elevate_module_assignments a WHERE a.module_id = lm.id AND a.specialist_id = ? AND a.assignment_status = 'assigned'))
        ORDER BY lm.sort_order, lm.id`, [me, me, me, me, me]),
   ]);
@@ -263,7 +270,8 @@ async function specialistDashboard(req, res) {
         applications: applications.length,
         answersToRead: current.reduce((sum, learner) => sum + learner.toRead, 0),
         certificates: Number(certificateRows[0].n) || 0,
-        sessionsHeld: Number(heldRows[0].n) || 0,
+        onlineSessions: Number(heldRows[0].online) || 0,
+        faceToFaceHeld: Number(heldRows[0].face_to_face) || 0,
       },
       // Most urgent first: waiting for a reply, answers to read, ready to complete.
       learners: current

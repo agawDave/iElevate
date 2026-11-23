@@ -88,7 +88,7 @@ export default function SkillCheckQuestionnaire({ initialProfile, onComplete }) 
     axiosClient.get('/elevate/skill-check')
       .then((response) => { if (active) setQuestionnaire(response.data.data); })
       .catch((requestError) => {
-        if (active) setError(requestError.response?.data?.message || 'Unable to load the skill check.');
+        if (active) setError(requestError.response?.data?.message || 'Unable to load the pre-assessment.');
       })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -141,13 +141,13 @@ export default function SkillCheckQuestionnaire({ initialProfile, onComplete }) 
       });
       onComplete?.(response.data.data);
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Unable to save your skill check.');
+      setError(requestError.response?.data?.message || 'Unable to save your pre-assessment.');
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading) return <SkeletonLines lines={6} label="Loading the skill check…" />;
+  if (loading) return <SkeletonLines lines={6} label="Loading the pre-assessment…" />;
   if (!questionnaire) return <p role="alert" className="text-sm text-red-600">{error}</p>;
 
   const answeredCount = topics.filter((topic) => ratings[topic.slug] !== undefined).length;

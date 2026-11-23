@@ -195,7 +195,7 @@ export default function LearningPlan() {
     let active = true;
     axiosClient.get('/elevate/skill-check/me')
       .then((response) => { if (active) setCheck(response.data.data); })
-      .catch((requestError) => { if (active) setCheckError(requestError.response?.data?.message || 'Unable to load your skill check.'); });
+      .catch((requestError) => { if (active) setCheckError(requestError.response?.data?.message || 'Unable to load your pre-assessment.'); });
     return () => { active = false; };
   }, [isBeneficiary]);
 
@@ -208,11 +208,11 @@ export default function LearningPlan() {
         eyebrow="ELEVATE profiling"
         title={isBeneficiary ? 'My Learning Plan' : 'My Teaching Plan'}
         subtitle={isBeneficiary
-          ? (check?.profile?.goalTrack ? `Your goal: ${GOAL_LABELS[check.profile.goalTrack]}. Your skill check and circumstances decide which topics you learn and who teaches each one.` : 'Your skill check and circumstances decide which topics you learn and which specialist teaches each one.')
-          : 'Your topics, teaching details and circumstances decide which beneficiaries are matched to you.'}
+          ? (check?.profile?.goalTrack ? `Your goal: ${GOAL_LABELS[check.profile.goalTrack]}. Your pre-assessment and preferred setup decide which topics you learn and who teaches each one.` : 'Your pre-assessment and preferred setup decide which topics you learn and which specialist teaches each one.')
+          : 'Your topics, teaching details and preferred setup decide which beneficiaries are matched to you.'}
         actions={(
           <>
-            {isBeneficiary && check?.completed && <Link to="/onboarding/learning-goals?retake=1" className={headerButtonClass}>Retake the skill check</Link>}
+            {isBeneficiary && check?.completed && <Link to="/onboarding/learning-goals?retake=1" className={headerButtonClass}>Retake the pre-assessment</Link>}
             <Link to="/modules" className={headerPrimaryClass}>See your matches →</Link>
           </>
         )}
@@ -228,20 +228,20 @@ export default function LearningPlan() {
 
       {isBeneficiary ? (
         <>
-          <Section title="Your skill check" description="Retake it after training so finished topics drop off and next-up topics start.">
+          <Section title="Your pre-assessment" description="Retake it after training so finished topics drop off and next-up topics start.">
             {checkError && <p role="alert" className="text-sm text-red-600">{checkError}</p>}
-            {!check && !checkError && <SkeletonLines lines={6} label="Loading your skill check…" />}
+            {!check && !checkError && <SkeletonLines lines={6} label="Loading your pre-assessment…" />}
             {check && !check.completed && (
               <div className="space-y-3">
-                <p className="text-sm text-slate-600">Take the ELEVATE skill check so your topics match your goal and level.</p>
-                <Link to="/onboarding/learning-goals?retake=1" className="inline-block rounded-lg bg-accent-500 px-4 py-2 text-sm font-bold text-brand-900 hover:bg-accent-550">Take the skill check</Link>
+                <p className="text-sm text-slate-600">Take the ELEVATE pre-assessment so your topics match your goal and level.</p>
+                <Link to="/onboarding/learning-goals?retake=1" className="inline-block rounded-lg bg-accent-500 px-4 py-2 text-sm font-bold text-brand-900 hover:bg-accent-550">Take the pre-assessment</Link>
               </div>
             )}
             {check?.completed && <SkillMap check={check} />}
           </Section>
           <CircumstancesPanel
             userType="beneficiary"
-            title="Your learning circumstances"
+            title="Your preferred setup"
             description="Your specialist for each topic is assigned from these details. Update them whenever your situation changes."
           />
         </>
@@ -258,7 +258,7 @@ export default function LearningPlan() {
           </Section>
           <CircumstancesPanel
             userType="specialist"
-            title="Your teaching circumstances"
+            title="Your preferred setup"
             description="Beneficiaries are matched to you when their schedule, learning mode, and barangay align with yours."
           />
         </>

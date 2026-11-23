@@ -1,5 +1,6 @@
 const { pool } = require('../config/db');
 const { loadPairs, countByStatus, weeklyTrend } = require('../lib/elevateAnalytics');
+const { offeredOrInUseSql } = require('../lib/programPhases');
 
 // Admin directories: searchable, filterable, server-side paginated lists of
 // beneficiaries, specialists, specialist-submitted modules and user accounts,
@@ -48,7 +49,7 @@ async function countRow(sql, params = []) {
 async function elevateTopics() {
   const [rows] = await pool.query(
     `SELECT id, title, phase FROM learning_modules
-     WHERE is_elevate_program = 1 AND approval_status = 'approved'
+     WHERE is_elevate_program = 1 AND approval_status = 'approved' AND ${offeredOrInUseSql('learning_modules')}
      ORDER BY sort_order, id`
   );
   return rows;
@@ -361,6 +362,7 @@ async function navCounts(req, res) {
        (SELECT COUNT(*) FROM users WHERE user_type = 'specialist' AND role = 'user') AS specialists,
        (SELECT COUNT(*) FROM users) AS users,
        (SELECT COUNT(*) FROM specialist_modules WHERE status = 'pending') AS pending_modules,
+       (SELECT COUNT(*) FROM learning_modules WHERE is_elevate_program = 1 AND approval_status = 'approved' AND is_hidden = 0) AS design_modules,
        (SELECT COUNT(*) FROM elevate_module_assignments WHERE assignment_status = 'waiting') AS waiting_topics`
   );
   res.json({ success: true, data: Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value) || 0])) });

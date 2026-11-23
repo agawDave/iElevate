@@ -57,6 +57,15 @@ function findBarangay(cityCode, name) {
 }
 
 // Canonical province / city by name, or null when it isn't in that region / province.
+// Beneficiaries outside the Philippines learn online only: face-to-face
+// sessions and radio lessons are local to the program. No country = local.
+function livesAbroad(country) {
+  const value = typeof country === 'string' ? country.trim().toLowerCase() : '';
+  return Boolean(value) && value !== PHILIPPINES.toLowerCase();
+}
+// The same test in SQL, for a users table alias.
+const localSql = (alias) => `(${alias}.country IS NULL OR TRIM(${alias}.country) = '' OR LOWER(TRIM(${alias}.country)) = 'philippines')`;
+
 function findProvince(regionCode, name) {
   return PH_PLACES.provinces.find((province) => province.regionCode === regionCode && same(province.name, name)) || null;
 }
@@ -66,6 +75,8 @@ function findCity(provinceCode, name) {
 }
 
 module.exports = {
+  livesAbroad,
+  localSql,
   PH_REGIONS,
   PH_REGION_CODES,
   PHILIPPINES,

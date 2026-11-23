@@ -1,4 +1,5 @@
 const { pool } = require('../config/db');
+const { livesAbroad } = require('./places');
 
 // Every ELEVATE conversation the user is part of. A chat exists once the
 // specialist accepts the learner's application, so its status is:
@@ -23,7 +24,7 @@ async function loadInbox(userId, { moduleId = null } = {}) {
             (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count,
             cert.id AS certificate_id, cert.certificate_code, cert.issued_at AS completed_at,
             cert.file_storage_name IS NOT NULL AS certificate_has_file, cert.file_original_name AS certificate_file_name,
-            profile.notes AS learner_notes,
+            profile.notes AS learner_notes, learner.country AS learner_country,
             (SELECT sa.band FROM elevate_skill_assessments sa
              WHERE sa.user_id = a.beneficiary_id AND sa.skill_id = a.matched_skill_id
              ORDER BY sa.attempt DESC LIMIT 1) AS learner_band
@@ -34,6 +35,7 @@ async function loadInbox(userId, { moduleId = null } = {}) {
        AND ((a.beneficiary_id = c.user_a_id AND a.specialist_id = c.user_b_id)
          OR (a.beneficiary_id = c.user_b_id AND a.specialist_id = c.user_a_id))
      JOIN users other ON other.id = IF(c.user_a_id = ?, c.user_b_id, c.user_a_id)
+     JOIN users learner ON learner.id = a.beneficiary_id
      LEFT JOIN messages last_message ON last_message.id = (
        SELECT m.id FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1
      )
@@ -71,6 +73,8 @@ async function loadInbox(userId, { moduleId = null } = {}) {
       certificateHasFile: Boolean(row.certificate_has_file),
       certificateFileName: row.certificate_file_name || null,
       completedAt: row.completed_at || null,
+      // The learner lives outside the Philippines: online only, no face-to-face booking.
+      learnerOnlineOnly: livesAbroad(row.learner_country),
       // Shown to the specialist only: what the learner wrote and their level.
       learnerNotes: isSpecialistView(row) ? row.learner_notes || '' : undefined,
       learnerBand: isSpecialistView(row) ? row.learner_band || null : undefined,

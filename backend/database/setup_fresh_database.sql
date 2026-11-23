@@ -15,7 +15,7 @@
 -- To read one table at a time, see the tables\ folder (one file per table) and
 -- the data\ folder (the reference data). This file is all of them together.
 --
--- Made from the project's own database on 2026-11-17 by export_setup_sql.ps1.
+-- Made from the project's own database on 2026-11-22 by export_setup_sql.ps1.
 
 CREATE DATABASE IF NOT EXISTS `ielevate_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `ielevate_db`;
@@ -23,7 +23,7 @@ SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ============================================================================
--- Tables (27)
+-- Tables (31)
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -193,6 +193,12 @@ CREATE TABLE `learning_modules` (
   `phase` varchar(40) NOT NULL,
   `title` varchar(190) NOT NULL,
   `description` varchar(500) NOT NULL,
+  `task` varchar(200) DEFAULT NULL,
+  `goal_tracks` varchar(100) DEFAULT NULL,
+  `uses_computer` tinyint(1) NOT NULL DEFAULT 0,
+  `recommend_as_foundation` tinyint(1) NOT NULL DEFAULT 0,
+  `learner_note` varchar(255) DEFAULT NULL,
+  `is_hidden` tinyint(1) NOT NULL DEFAULT 0,
   `hours` int(10) unsigned NOT NULL DEFAULT 0,
   `sort_order` int(10) unsigned NOT NULL DEFAULT 0,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
@@ -204,6 +210,30 @@ CREATE TABLE `learning_modules` (
   `is_elevate_program` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   UNIQUE KEY `slug` (`slug`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
+-- learning_sessions: Online sessions: one per beneficiary, module and day the beneficiary worked on it online (activity answers, topic tests).
+-- ----------------------------------------------------------------------------
+CREATE TABLE `learning_sessions` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `module_id` int(10) unsigned NOT NULL,
+  `beneficiary_id` bigint(20) unsigned NOT NULL,
+  `specialist_id` bigint(20) unsigned NOT NULL,
+  `session_date` date NOT NULL,
+  `started_at` datetime NOT NULL,
+  `ended_at` datetime NOT NULL,
+  `answers` smallint(5) unsigned NOT NULL DEFAULT 0,
+  `pre_test` tinyint(1) NOT NULL DEFAULT 0,
+  `post_test` tinyint(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_learning_session_day` (`module_id`,`beneficiary_id`,`specialist_id`,`session_date`),
+  KEY `idx_learning_session_beneficiary` (`beneficiary_id`,`session_date`),
+  KEY `idx_learning_session_specialist` (`specialist_id`,`session_date`),
+  KEY `idx_learning_session_date` (`session_date`),
+  CONSTRAINT `fk_learning_session_beneficiary` FOREIGN KEY (`beneficiary_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_learning_session_module` FOREIGN KEY (`module_id`) REFERENCES `learning_modules` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_learning_session_specialist` FOREIGN KEY (`specialist_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
@@ -317,6 +347,18 @@ CREATE TABLE `module_connections` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
+-- module_prerequisites: Which modules a module needs first (a topic waits as "next up" until the beneficiary can do them).
+-- ----------------------------------------------------------------------------
+CREATE TABLE `module_prerequisites` (
+  `module_id` int(10) unsigned NOT NULL,
+  `prerequisite_id` int(10) unsigned NOT NULL,
+  PRIMARY KEY (`module_id`,`prerequisite_id`),
+  KEY `idx_module_prerequisite` (`prerequisite_id`),
+  CONSTRAINT `fk_module_prerequisite_module` FOREIGN KEY (`module_id`) REFERENCES `learning_modules` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_module_prerequisite_needs` FOREIGN KEY (`prerequisite_id`) REFERENCES `learning_modules` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
 -- module_resources: Materials for a topic: the official ELEVATE program documents, and the files and links specialists add.
 -- ----------------------------------------------------------------------------
 CREATE TABLE `module_resources` (
@@ -341,17 +383,33 @@ CREATE TABLE `module_resources` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
--- module_sessions: Sessions between a specialist and a beneficiary for a topic: when, the meeting link, and the status.
+-- module_session_attendees: Beneficiaries who joined an open face-to-face session, and whether they came.
+-- ----------------------------------------------------------------------------
+CREATE TABLE `module_session_attendees` (
+  `session_id` bigint(20) unsigned NOT NULL,
+  `beneficiary_id` bigint(20) unsigned NOT NULL,
+  `joined_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `attended` tinyint(1) DEFAULT NULL,
+  PRIMARY KEY (`session_id`,`beneficiary_id`),
+  KEY `idx_session_attendee_beneficiary` (`beneficiary_id`),
+  CONSTRAINT `fk_session_attendee_beneficiary` FOREIGN KEY (`beneficiary_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_session_attendee_session` FOREIGN KEY (`session_id`) REFERENCES `module_sessions` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
+-- module_sessions: Face-to-face sessions for a topic: one-on-one (a specialist and a beneficiary) or open (posted by a specialist for anyone who needs the topic), with when, where, seats and the status.
 -- ----------------------------------------------------------------------------
 CREATE TABLE `module_sessions` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `module_id` int(10) unsigned NOT NULL,
-  `beneficiary_id` bigint(20) unsigned NOT NULL,
+  `beneficiary_id` bigint(20) unsigned DEFAULT NULL,
   `specialist_id` bigint(20) unsigned NOT NULL,
+  `is_open` tinyint(1) NOT NULL DEFAULT 0,
   `title` varchar(190) DEFAULT NULL,
   `starts_at` datetime NOT NULL,
   `ends_at` datetime NOT NULL,
   `meeting_link` varchar(255) DEFAULT NULL,
+  `seats` smallint(5) unsigned DEFAULT NULL,
   `status` enum('pending','confirmed','completed','cancelled','no_show') NOT NULL DEFAULT 'pending',
   `scheduled_by` bigint(20) unsigned NOT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
@@ -442,6 +500,20 @@ CREATE TABLE `portfolio_items` (
   PRIMARY KEY (`id`),
   KEY `idx_portfolio_item_owner` (`user_id`,`kind`),
   CONSTRAINT `fk_portfolio_item_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
+-- program_phases: The ELEVATE phases: number, name and the year each was created (its modules have learning_modules.phase).
+-- ----------------------------------------------------------------------------
+CREATE TABLE `program_phases` (
+  `number` tinyint(3) unsigned NOT NULL,
+  `name` varchar(120) NOT NULL,
+  `year` smallint(5) unsigned DEFAULT NULL,
+  `created_by` bigint(20) unsigned DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`number`),
+  KEY `fk_program_phase_creator` (`created_by`),
+  CONSTRAINT `fk_program_phase_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
@@ -619,6 +691,7 @@ CREATE TABLE `users` (
 INSERT INTO `skill_categories` (`id`, `parent_id`, `name`, `slug`, `created_at`) VALUES (12,NULL,'ELEVATE Phase 1: Job Readiness','elevate-phase-1-topics','2026-11-04 16:46:12');
 INSERT INTO `skill_categories` (`id`, `parent_id`, `name`, `slug`, `created_at`) VALUES (13,NULL,'ELEVATE Phase 2: Freelancing and Virtual Work','elevate-phase-2-topics','2026-11-04 16:46:12');
 INSERT INTO `skill_categories` (`id`, `parent_id`, `name`, `slug`, `created_at`) VALUES (16,NULL,'ELEVATE Phase 3: Digital Marketing and Entrepreneurship','elevate-phase-3-topics','2026-11-04 17:24:14');
+INSERT INTO `skill_categories` (`id`, `parent_id`, `name`, `slug`, `created_at`) VALUES (21,NULL,'ELEVATE Phase 4: Gaming','elevate-phase-4-topics','2026-11-22 20:22:02');
 
 -- skills: The skills behind the ELEVATE topics.
 INSERT INTO `skills` (`id`, `category_id`, `name`, `slug`, `is_approved`, `created_at`) VALUES (63,12,'Basic Computer Operation','elevate-basic-computer-operation',1,'2026-11-04 16:46:12');
@@ -636,23 +709,23 @@ INSERT INTO `skills` (`id`, `category_id`, `name`, `slug`, `is_approved`, `creat
 INSERT INTO `skills` (`id`, `category_id`, `name`, `slug`, `is_approved`, `created_at`) VALUES (86,16,'Core Digital Marketing Skills','elevate-core-digital-marketing',1,'2026-11-04 17:24:14');
 INSERT INTO `skills` (`id`, `category_id`, `name`, `slug`, `is_approved`, `created_at`) VALUES (87,16,'Building a Digital Business','elevate-digital-business',1,'2026-11-04 17:24:14');
 
--- learning_modules: The ELEVATE topics from the training design.
-INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (89,'elevate-phase-3','ELEVATE Phase 3','Digital Marketing and Entrepreneurship','Build digital-marketing and entrepreneurship skills for employment and starting a business.',48,3,'2026-11-04 16:08:58',NULL,'pending',NULL,NULL,'beginner',1);
-INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (90,'elevate-phase-4','ELEVATE Phase 4','ELEVATE On Air','Continue ELEVATE digital-marketing and entrepreneurship learning through flexible radio-based delivery.',48,4,'2026-11-04 16:08:58',NULL,'pending',NULL,NULL,'beginner',1);
-INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (95,'elevate-basic-computer-operation','ELEVATE Phase 1','Basic Computer Operation','Lecture and demonstration on operating a computer: the foundation for the productivity, internet, and work-from-home skills in ELEVATE.',16,101,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
-INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (96,'elevate-google-document','ELEVATE Phase 1','Google Document','Create, format, and share documents with Google Docs and MS Word.',8,102,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
-INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (97,'elevate-google-slides','ELEVATE Phase 1','Google Slides','Build and present slide decks with Google Slides and MS PowerPoint.',8,103,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
-INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (98,'elevate-google-spreadsheet','ELEVATE Phase 1','Google Spreadsheet','Organize data and work with formulas in Google Sheets and MS Excel.',8,104,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
-INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (99,'elevate-basic-internet-operation','ELEVATE Phase 1','Basic Internet Operation','Use the internet for work: browsing, searching, and sending messages or documents with Gmail.',16,105,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
-INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (100,'elevate-english-communication','ELEVATE Phase 1','English Communication Training','Build confidence in English communication for job applications and BPO work, with a pre-assessment and final assessment.',24,106,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
-INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (101,'elevate-freelancing-101','ELEVATE Phase 2','Freelancing 101','Learn how freelancing works and how to start a freelance career.',8,201,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
-INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (102,'elevate-online-marketplace','ELEVATE Phase 2','Introduction to Online Marketplace','Explore online marketplaces where freelancers find clients and apply for work.',8,202,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
-INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (103,'elevate-work-from-home-setup','ELEVATE Phase 2','Work from Home Basic Set up','Prepare a basic work-from-home setup: equipment, connectivity, and remote-work tools.',8,203,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
-INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (104,'elevate-wordpress','ELEVATE Phase 2','Basics of WordPress','Build and manage a simple website with WordPress.',8,204,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
-INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (105,'elevate-virtual-assistant','ELEVATE Phase 2','How to become a Virtual Assistant','Learn the role, tools, and services of a virtual assistant and how to start a virtual-assistant career.',8,205,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
-INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (117,'elevate-digital-marketing-intro','ELEVATE Phase 3','Introduction to Digital Marketing & Entrepreneurship','The fundamentals of digital marketing and entrepreneurship, career paths in both, and a growth mindset. Also broadcast as ELEVATE On Air.',8,301,'2026-11-04 17:24:14',NULL,'approved',NULL,NULL,'beginner',1);
-INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (118,'elevate-core-digital-marketing','ELEVATE Phase 3','Core Digital Marketing Skills','Social media marketing, content creation (writing, visuals, video editing basics), and setting up an online store on platforms such as Shopify or Lazada.',16,302,'2026-11-04 17:24:14',NULL,'approved',NULL,NULL,'beginner',1);
-INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (119,'elevate-digital-business','ELEVATE Phase 3','Building a Digital Business','A business plan framework for a digital venture, marketing strategies for launching it, and building its brand.',16,303,'2026-11-04 17:24:14',NULL,'approved',NULL,NULL,'beginner',1);
+-- learning_modules: The ELEVATE modules from the training design, with each one's pre-assessment task and goals.
+INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `task`, `goal_tracks`, `uses_computer`, `recommend_as_foundation`, `learner_note`, `is_hidden`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (89,'elevate-phase-3','ELEVATE Phase 3','Digital Marketing and Entrepreneurship','Build digital-marketing and entrepreneurship skills for employment and starting a business.',NULL,NULL,0,0,NULL,0,48,3,'2026-11-04 16:08:58',NULL,'pending',NULL,NULL,'beginner',1);
+INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `task`, `goal_tracks`, `uses_computer`, `recommend_as_foundation`, `learner_note`, `is_hidden`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (90,'elevate-phase-4','ELEVATE Phase 4','ELEVATE On Air','Continue ELEVATE digital-marketing and entrepreneurship learning through flexible radio-based delivery.',NULL,NULL,0,0,NULL,0,48,4,'2026-11-04 16:08:58',NULL,'pending',NULL,NULL,'beginner',1);
+INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `task`, `goal_tracks`, `uses_computer`, `recommend_as_foundation`, `learner_note`, `is_hidden`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (95,'elevate-basic-computer-operation','ELEVATE Phase 1','Basic Computer Operation','Lecture and demonstration on operating a computer: the foundation for the productivity, internet, and work-from-home skills in ELEVATE.','Turn on a computer, use the mouse and keyboard, and save and find files','[\"job\",\"freelance\",\"business\"]',1,1,NULL,0,16,101,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
+INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `task`, `goal_tracks`, `uses_computer`, `recommend_as_foundation`, `learner_note`, `is_hidden`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (96,'elevate-google-document','ELEVATE Phase 1','Google Document','Create, format, and share documents with Google Docs and MS Word.','Write and format a document in Google Docs or MS Word','[\"job\",\"freelance\"]',1,0,NULL,0,8,102,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
+INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `task`, `goal_tracks`, `uses_computer`, `recommend_as_foundation`, `learner_note`, `is_hidden`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (97,'elevate-google-slides','ELEVATE Phase 1','Google Slides','Build and present slide decks with Google Slides and MS PowerPoint.','Make a slide presentation in Google Slides or PowerPoint','[\"job\",\"freelance\"]',1,0,NULL,0,8,103,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
+INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `task`, `goal_tracks`, `uses_computer`, `recommend_as_foundation`, `learner_note`, `is_hidden`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (98,'elevate-google-spreadsheet','ELEVATE Phase 1','Google Spreadsheet','Organize data and work with formulas in Google Sheets and MS Excel.','Organize data and use simple formulas in Google Sheets or Excel','[\"job\",\"freelance\",\"business\"]',1,0,NULL,0,8,104,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
+INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `task`, `goal_tracks`, `uses_computer`, `recommend_as_foundation`, `learner_note`, `is_hidden`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (99,'elevate-basic-internet-operation','ELEVATE Phase 1','Basic Internet Operation','Use the internet for work: browsing, searching, and sending messages or documents with Gmail.','Search the internet and send emails with attachments in Gmail','[\"job\",\"freelance\",\"business\"]',0,0,NULL,0,16,105,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
+INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `task`, `goal_tracks`, `uses_computer`, `recommend_as_foundation`, `learner_note`, `is_hidden`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (100,'elevate-english-communication','ELEVATE Phase 1','English Communication Training','Build confidence in English communication for job applications and BPO work, with a pre-assessment and final assessment.','Answer job interview questions in English','[\"job\",\"freelance\"]',0,0,'Your specialist will confirm your English level in a short spoken check.',0,24,106,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
+INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `task`, `goal_tracks`, `uses_computer`, `recommend_as_foundation`, `learner_note`, `is_hidden`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (101,'elevate-freelancing-101','ELEVATE Phase 2','Freelancing 101','Learn how freelancing works and how to start a freelance career.','Explain what freelancing is and how freelancers get paid','[\"freelance\"]',0,0,NULL,0,8,201,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
+INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `task`, `goal_tracks`, `uses_computer`, `recommend_as_foundation`, `learner_note`, `is_hidden`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (102,'elevate-online-marketplace','ELEVATE Phase 2','Introduction to Online Marketplace','Explore online marketplaces where freelancers find clients and apply for work.','Create a profile and apply for work on a site like Upwork or OnlineJobs.ph','[\"freelance\"]',0,0,NULL,0,8,202,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
+INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `task`, `goal_tracks`, `uses_computer`, `recommend_as_foundation`, `learner_note`, `is_hidden`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (103,'elevate-work-from-home-setup','ELEVATE Phase 2','Work from Home Basic Set up','Prepare a basic work-from-home setup: equipment, connectivity, and remote-work tools.','Set up a device, internet and tools for working from home','[\"freelance\"]',0,0,NULL,0,8,203,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
+INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `task`, `goal_tracks`, `uses_computer`, `recommend_as_foundation`, `learner_note`, `is_hidden`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (104,'elevate-wordpress','ELEVATE Phase 2','Basics of WordPress','Build and manage a simple website with WordPress.','Build or edit a simple website in WordPress','[\"freelance\"]',0,0,NULL,0,8,204,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
+INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `task`, `goal_tracks`, `uses_computer`, `recommend_as_foundation`, `learner_note`, `is_hidden`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (105,'elevate-virtual-assistant','ELEVATE Phase 2','How to become a Virtual Assistant','Learn the role, tools, and services of a virtual assistant and how to start a virtual-assistant career.','Do virtual-assistant tasks such as managing a client’s email and schedule','[\"freelance\"]',0,0,NULL,0,8,205,'2026-11-04 16:46:12',NULL,'approved',NULL,NULL,'beginner',1);
+INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `task`, `goal_tracks`, `uses_computer`, `recommend_as_foundation`, `learner_note`, `is_hidden`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (117,'elevate-digital-marketing-intro','ELEVATE Phase 3','Introduction to Digital Marketing & Entrepreneurship','The fundamentals of digital marketing and entrepreneurship, career paths in both, and a growth mindset. Also broadcast as ELEVATE On Air.','Explain how digital marketing helps a small business sell.','[\"business\"]',0,1,NULL,0,8,301,'2026-11-04 17:24:14',NULL,'approved',NULL,NULL,'beginner',1);
+INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `task`, `goal_tracks`, `uses_computer`, `recommend_as_foundation`, `learner_note`, `is_hidden`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (118,'elevate-core-digital-marketing','ELEVATE Phase 3','Core Digital Marketing Skills','Social media marketing, content creation (writing, visuals, video editing basics), and setting up an online store on platforms such as Shopify or Lazada.','Make social media posts that promote a product','[\"business\"]',0,0,NULL,0,16,302,'2026-11-04 17:24:14',NULL,'approved',NULL,NULL,'beginner',1);
+INSERT INTO `learning_modules` (`id`, `slug`, `phase`, `title`, `description`, `task`, `goal_tracks`, `uses_computer`, `recommend_as_foundation`, `learner_note`, `is_hidden`, `hours`, `sort_order`, `created_at`, `owner_id`, `approval_status`, `reviewed_by`, `reviewed_at`, `difficulty`, `is_elevate_program`) VALUES (119,'elevate-digital-business','ELEVATE Phase 3','Building a Digital Business','A business plan framework for a digital venture, marketing strategies for launching it, and building its brand.','Write a simple business plan for selling online','[\"business\"]',0,0,NULL,0,16,303,'2026-11-04 17:24:14',NULL,'approved',NULL,NULL,'beginner',1);
 
 -- module_skills: Which skill each ELEVATE topic teaches.
 INSERT INTO `module_skills` (`module_id`, `skill_id`, `is_primary`, `created_at`) VALUES (95,63,1,'2026-11-04 16:46:12');
@@ -669,6 +742,29 @@ INSERT INTO `module_skills` (`module_id`, `skill_id`, `is_primary`, `created_at`
 INSERT INTO `module_skills` (`module_id`, `skill_id`, `is_primary`, `created_at`) VALUES (117,85,1,'2026-11-04 17:24:14');
 INSERT INTO `module_skills` (`module_id`, `skill_id`, `is_primary`, `created_at`) VALUES (118,86,1,'2026-11-04 17:24:14');
 INSERT INTO `module_skills` (`module_id`, `skill_id`, `is_primary`, `created_at`) VALUES (119,87,1,'2026-11-04 17:24:14');
+
+-- module_prerequisites: Which modules a module needs first.
+INSERT INTO `module_prerequisites` (`module_id`, `prerequisite_id`) VALUES (96,95);
+INSERT INTO `module_prerequisites` (`module_id`, `prerequisite_id`) VALUES (97,95);
+INSERT INTO `module_prerequisites` (`module_id`, `prerequisite_id`) VALUES (98,95);
+INSERT INTO `module_prerequisites` (`module_id`, `prerequisite_id`) VALUES (101,99);
+INSERT INTO `module_prerequisites` (`module_id`, `prerequisite_id`) VALUES (102,99);
+INSERT INTO `module_prerequisites` (`module_id`, `prerequisite_id`) VALUES (102,100);
+INSERT INTO `module_prerequisites` (`module_id`, `prerequisite_id`) VALUES (103,99);
+INSERT INTO `module_prerequisites` (`module_id`, `prerequisite_id`) VALUES (104,95);
+INSERT INTO `module_prerequisites` (`module_id`, `prerequisite_id`) VALUES (104,99);
+INSERT INTO `module_prerequisites` (`module_id`, `prerequisite_id`) VALUES (105,96);
+INSERT INTO `module_prerequisites` (`module_id`, `prerequisite_id`) VALUES (105,98);
+INSERT INTO `module_prerequisites` (`module_id`, `prerequisite_id`) VALUES (105,99);
+INSERT INTO `module_prerequisites` (`module_id`, `prerequisite_id`) VALUES (105,100);
+INSERT INTO `module_prerequisites` (`module_id`, `prerequisite_id`) VALUES (118,117);
+INSERT INTO `module_prerequisites` (`module_id`, `prerequisite_id`) VALUES (119,117);
+
+-- program_phases: The ELEVATE phases, with the year each was created.
+INSERT INTO `program_phases` (`number`, `name`, `year`, `created_by`, `created_at`) VALUES (1,'Job Readiness',2021,NULL,'2026-11-22 19:12:44');
+INSERT INTO `program_phases` (`number`, `name`, `year`, `created_by`, `created_at`) VALUES (2,'Freelancing and Virtual Work',NULL,NULL,'2026-11-22 19:12:44');
+INSERT INTO `program_phases` (`number`, `name`, `year`, `created_by`, `created_at`) VALUES (3,'Digital Marketing and Entrepreneurship',NULL,NULL,'2026-11-22 19:12:44');
+INSERT INTO `program_phases` (`number`, `name`, `year`, `created_by`, `created_at`) VALUES (4,'Gaming',2026,5,'2026-11-22 20:22:02');
 
 -- module_resources: The official ELEVATE program documents. Files and links people added are left out.
 INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (12,89,NULL,'pdf','Official ELEVATE Phase 3 Program Document','ELEVATE-Phase-3.pdf','elevate-phase-3.pdf','application/pdf',NULL,NULL,1,'2026-11-04 16:08:58');

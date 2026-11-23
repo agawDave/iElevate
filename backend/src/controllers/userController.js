@@ -11,7 +11,7 @@ const {
   recomputeAssignmentsForSpecialist,
 } = require('../services/elevateAssignmentService');
 
-const { PH_REGION_CODES, PHILIPPINES, findProvince, findCity, findBarangay } = require('../lib/places');
+const { PH_REGION_CODES, PHILIPPINES, findProvince, findCity, findBarangay, livesAbroad } = require('../lib/places');
 
 const SEX_VALUES = ['female', 'male', 'prefer_not_to_say'];
 const WORK_STATUS_VALUES = ['unemployed', 'employed', 'self_employed', 'student'];
@@ -227,6 +227,14 @@ async function updateMyProfile(req, res) {
          ON DUPLICATE KEY UPDATE barangay = VALUES(barangay)${hasCity ? ', city = VALUES(city)' : ''}`,
         hasCity ? [req.user.id, matchPlace.barangay, matchPlace.city] : [req.user.id, matchPlace.barangay]
       );
+      // Moving outside the Philippines: online only from now on.
+      if (isBeneficiary && body.country !== undefined && livesAbroad(fields.country)) {
+        await connection.query(
+          `UPDATE user_learning_circumstances SET learning_modes = '["online"]'
+           WHERE user_id = ? AND learning_modes IS NOT NULL AND learning_modes <> '[]'`,
+          [req.user.id]
+        );
+      }
       // Barangay and city affect which face-to-face specialist fits best.
       if (isBeneficiary) await recomputeElevateAssignments(req.user.id, connection);
     }
@@ -266,7 +274,7 @@ async function findLearningUserType(userId) {
 async function getMyCircumstances(req, res) {
   const userType = await findLearningUserType(req.user.id);
   if (!userType) {
-    return res.status(403).json({ success: false, message: 'Only beneficiaries and specialists have learning circumstances' });
+    return res.status(403).json({ success: false, message: 'Only beneficiaries and specialists have a preferred setup' });
   }
   const [rows] = await pool.query('SELECT * FROM user_learning_circumstances WHERE user_id = ?', [req.user.id]);
   const circumstances = circumstancesFromRow(rows[0]);
@@ -276,9 +284,10 @@ async function getMyCircumstances(req, res) {
 async function updateMyCircumstances(req, res) {
   const userType = await findLearningUserType(req.user.id);
   if (!userType) {
-    return res.status(403).json({ success: false, message: 'Only beneficiaries and specialists have learning circumstances' });
+    return res.status(403).json({ success: false, message: 'Only beneficiaries and specialists have a preferred setup' });
   }
-  const { value, error } = validateCircumstances(req.body, userType);
+  const [[me]] = await pool.query('SELECT country FROM users WHERE id = ?', [req.user.id]);
+  const { value, error } = validateCircumstances(req.body, userType, { country: me?.country });
   if (error) return res.status(400).json({ success: false, message: error });
   const [saved] = await pool.query('SELECT barangay, city FROM user_learning_circumstances WHERE user_id = ?', [req.user.id]);
   if (value.barangay === undefined) {
@@ -321,7 +330,7 @@ async function updateMyCircumstances(req, res) {
     await recomputeAssignmentsForSpecialist(req.user.id);
   }
 
-  res.json({ success: true, message: 'Learning circumstances saved', data: { ...value, complete: isComplete(value, userType) } });
+  res.json({ success: true, message: 'Preferred setup saved', data: { ...value, complete: isComplete(value, userType) } });
 }
 
 module.exports = {

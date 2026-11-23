@@ -37,10 +37,14 @@ $about = @{
   module_certificates          = 'The certificate a specialist uploads when a beneficiary completes a topic.'
   module_connections           = 'Topics a beneficiary has been accepted into (recorded when a specialist accepts them, so they can chat).'
   module_resources             = 'Materials for a topic: the official ELEVATE program documents, and the files and links specialists add.'
-  module_sessions              = 'Sessions between a specialist and a beneficiary for a topic: when, the meeting link, and the status.'
+  module_sessions              = 'Face-to-face sessions for a topic: one-on-one (a specialist and a beneficiary) or open (posted by a specialist for anyone who needs the topic), with when, where, seats and the status.'
+  module_session_attendees     = 'Beneficiaries who joined an open face-to-face session, and whether they came.'
+  learning_sessions            = 'Online sessions: one per beneficiary, module and day the beneficiary worked on it online (activity answers, topic tests).'
   module_skills                = 'Which skill each ELEVATE topic teaches (links learning_modules to skills).'
   module_test_attempts         = "Beneficiaries' pre-test and post-test scores, each with a copy of the questions as they were."
   module_test_questions        = 'The pre-test and post-test questions a specialist writes for a topic.'
+  module_prerequisites         = 'Which modules a module needs first (a topic waits as "next up" until the beneficiary can do them).'
+  program_phases               = 'The ELEVATE phases: number, name and the year each was created (its modules have learning_modules.phase).'
   portfolio_items              = 'What beneficiaries add to their portfolio: projects, awards, photos, licenses, trainings and letters.'
   skill_categories             = 'Groups of skills: the ELEVATE phases.'
   skills                       = 'The skills behind the ELEVATE topics.'
@@ -56,8 +60,10 @@ $about = @{
 $reference = [ordered]@{
   skill_categories = @{ about = 'The ELEVATE phases, as skill categories.' }
   skills           = @{ about = 'The skills behind the ELEVATE topics.' }
-  learning_modules = @{ about = 'The ELEVATE topics from the training design.' }
+  learning_modules = @{ about = 'The ELEVATE modules from the training design, with each one''s pre-assessment task and goals.' }
   module_skills    = @{ about = 'Which skill each ELEVATE topic teaches.' }
+  module_prerequisites = @{ about = 'Which modules a module needs first.' }
+  program_phases       = @{ about = 'The ELEVATE phases, with the year each was created.' }
   module_resources = @{ about = 'The official ELEVATE program documents. Files and links people added are left out.'; where = 'uploaded_by IS NULL' }
 }
 

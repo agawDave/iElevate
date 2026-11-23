@@ -6,23 +6,13 @@ const {
   validateSubmission,
   scoreSubmission,
 } = require('../lib/elevateSkillCheck');
-
-async function loadTopicRows(connection = pool) {
-  const [rows] = await connection.query(
-    `SELECT s.id AS skill_id, lm.slug, lm.title, lm.phase
-     FROM learning_modules lm
-     JOIN module_skills ms ON ms.module_id = lm.id AND ms.is_primary = 1
-     JOIN skills s ON s.id = ms.skill_id AND s.is_approved = 1 AND s.slug = lm.slug
-     WHERE lm.is_elevate_program = 1 AND lm.approval_status = 'approved'
-     ORDER BY lm.sort_order, lm.id`
-  );
-  return rows;
-}
+// The current year's modules, with their tasks, goals and prerequisites.
+const { loadProgramTopics } = require('../lib/programPhases');
 
 async function requireBeneficiary(req, res) {
   const [users] = await pool.query("SELECT user_type FROM users WHERE id = ? AND status = 'active'", [req.user.id]);
   if (users[0]?.user_type !== 'beneficiary') {
-    res.status(403).json({ success: false, message: 'Only beneficiaries take the ELEVATE skill check' });
+    res.status(403).json({ success: false, message: 'Only beneficiaries take the ELEVATE pre-assessment' });
     return false;
   }
   return true;
@@ -38,7 +28,7 @@ function parseJsonList(value) {
 }
 
 async function getQuestionnaire(req, res) {
-  res.json({ success: true, data: publicQuestionnaire(await loadTopicRows()) });
+  res.json({ success: true, data: publicQuestionnaire(await loadProgramTopics()) });
 }
 
 // The learner's latest attempt: Part A answers plus one result per topic.
@@ -92,10 +82,10 @@ async function getMySkillCheck(req, res) {
 
 async function submitSkillCheck(req, res) {
   if (!(await requireBeneficiary(req, res))) return;
-  const topicRows = await loadTopicRows();
-  const { value, error } = validateSubmission(req.body, new Set(topicRows.map((row) => row.slug)));
+  const topics = await loadProgramTopics();
+  const { value, error } = validateSubmission(req.body, topics);
   if (error) return res.status(400).json({ success: false, message: error });
-  const results = scoreSubmission(value, topicRows);
+  const results = scoreSubmission(value, topics);
   const { profile } = value;
 
   const connection = await pool.getConnection();
@@ -146,7 +136,7 @@ async function submitSkillCheck(req, res) {
     await logActivity({ userId: req.user.id, action: 'skill_check', details: attempt === 1 ? 'Pre-test' : 'Post-test' });
     res.status(201).json({
       success: true,
-      message: 'Skill check saved',
+      message: 'Pre-assessment saved',
       data: {
         attempt,
         results: results.map(({ answers, ...rest }) => rest),

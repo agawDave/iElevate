@@ -178,7 +178,8 @@ function TopicCard({ topic, own, onFileError, onChanged }) {
     pre && `Pre-test ${pre.score}/${pre.total}${post ? ` → Post-test ${post.score}/${post.total}${post.score > pre.score ? ` (+${post.score - pre.score})` : ''}` : ''}`,
     !pre && post && `Post-test ${post.score}/${post.total}`,
     topic.activities.total > 0 && `Activities ${topic.activities.done}/${topic.activities.total}`,
-    topic.sessionsHeld > 0 && `${topic.sessionsHeld} session${topic.sessionsHeld === 1 ? '' : 's'} held`,
+    topic.onlineSessions > 0 && `${topic.onlineSessions} online session${topic.onlineSessions === 1 ? '' : 's'}`,
+    topic.faceToFaceSessions > 0 && `${topic.faceToFaceSessions} face-to-face`,
   ].filter(Boolean);
 
   return (
@@ -444,8 +445,8 @@ export default function PortfolioView({ data, own = true, onChanged }) {
       <Section index={1}>
         <p className="mb-3 text-sm text-slate-500">
           {skillProfile.topics.length
-            ? `From the ELEVATE skill check${skillProfile.firstTakenAt ? `, first taken ${longDate(skillProfile.firstTakenAt)}` : ''}${skillProfile.lastTakenAt && longDate(skillProfile.lastTakenAt) !== longDate(skillProfile.firstTakenAt) ? `, retaken ${longDate(skillProfile.lastTakenAt)}` : ''}.`
-            : 'No skill check yet.'}
+            ? `From the ELEVATE pre-assessment${skillProfile.firstTakenAt ? `, first taken ${longDate(skillProfile.firstTakenAt)}` : ''}${skillProfile.lastTakenAt && longDate(skillProfile.lastTakenAt) !== longDate(skillProfile.firstTakenAt) ? `, retaken ${longDate(skillProfile.lastTakenAt)}` : ''}.`
+            : 'No pre-assessment yet.'}
           {own && <> <Link to="/learning-plan" className="font-medium text-brand-600 hover:underline print:hidden">See your learning plan</Link></>}
         </p>
         {skillProfile.topics.length > 0 && (

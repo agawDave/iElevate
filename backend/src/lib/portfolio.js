@@ -71,8 +71,17 @@ async function buildPortfolio(beneficiaryId) {
       [beneficiaryId]
     ),
     pool.query(
-      "SELECT module_id, COUNT(*) AS n FROM module_sessions WHERE beneficiary_id = ? AND status = 'completed' GROUP BY module_id",
-      [beneficiaryId]
+      // Online sessions, and face-to-face sessions they came to (one-on-one held, or an open one attended).
+      `SELECT module_id, SUM(kind = 'online') AS online, SUM(kind = 'face') AS face FROM (
+         SELECT module_id, 'online' AS kind FROM learning_sessions WHERE beneficiary_id = ?
+         UNION ALL
+         SELECT module_id, 'face' FROM module_sessions WHERE beneficiary_id = ? AND is_open = 0 AND status = 'completed'
+         UNION ALL
+         SELECT ms.module_id, 'face' FROM module_sessions ms
+         JOIN module_session_attendees sa ON sa.session_id = ms.id AND sa.beneficiary_id = ? AND sa.attended = 1
+         WHERE ms.is_open = 1 AND ms.status = 'completed'
+       ) AS sessions GROUP BY module_id`,
+      [beneficiaryId, beneficiaryId, beneficiaryId]
     ),
     pool.query(
       `SELECT lm.id AS module_id, lm.title, lm.phase, lm.sort_order, sa.test_kind, sa.band, sa.taken_at
@@ -105,7 +114,7 @@ async function buildPortfolio(beneficiaryId) {
   ]).then((results) => results.map(([rows]) => rows));
 
   const activityBy = new Map(activityCounts.map((row) => [Number(row.module_id), { total: Number(row.total) || 0, done: Number(row.done) || 0 }]));
-  const sessionsBy = new Map(sessions.map((row) => [Number(row.module_id), Number(row.n)]));
+  const sessionsBy = new Map(sessions.map((row) => [Number(row.module_id), { online: Number(row.online) || 0, face: Number(row.face) || 0 }]));
   const testOf = (moduleId, specialistId, kind) => attempt(tests.find((row) => Number(row.module_id) === Number(moduleId)
     && Number(row.specialist_id) === Number(specialistId) && row.test_kind === kind));
 
@@ -128,7 +137,8 @@ async function buildPortfolio(beneficiaryId) {
         certificate: row.certificate_id ? { id: row.certificate_id, hasFile: Boolean(row.has_file), issuedBy: row.issuer_name || null } : null,
         tests: pre || post ? { pre, post } : null,
         activities: activityBy.get(moduleId) || { total: 0, done: 0 },
-        sessionsHeld: sessionsBy.get(moduleId) || 0,
+        onlineSessions: sessionsBy.get(moduleId)?.online || 0,
+        faceToFaceSessions: sessionsBy.get(moduleId)?.face || 0,
         work: work.filter((item) => Number(item.module_id) === moduleId).map((item) => ({
           answerId: item.id,
           type: item.activity_type,
@@ -215,7 +225,8 @@ async function buildPortfolio(beneficiaryId) {
       ongoing: topics.length - completed.length,
       certificates: topics.filter((topic) => topic.certificate).length,
       hoursCompleted: completed.reduce((sum, topic) => sum + (topic.hours || 0), 0),
-      sessionsHeld: topics.reduce((sum, topic) => sum + topic.sessionsHeld, 0),
+      onlineSessions: topics.reduce((sum, topic) => sum + topic.onlineSessions, 0),
+      faceToFaceSessions: topics.reduce((sum, topic) => sum + topic.faceToFaceSessions, 0),
     },
     skillProfile: {
       firstTakenAt: takenDates.length ? new Date(Math.min(...takenDates)) : null,

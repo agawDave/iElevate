@@ -18,7 +18,7 @@ import Portfolio from '../pages/Portfolio';
 import AdminDashboard from '../pages/admin/AdminDashboard';
 import AdminBeneficiaries from '../pages/admin/AdminBeneficiaries';
 import AdminSpecialists from '../pages/admin/AdminSpecialists';
-import AdminModules from '../pages/admin/AdminModules';
+import AdminModulesPage from '../pages/admin/AdminModulesPage';
 import AdminUsers from '../pages/admin/AdminUsers';
 import AdminReports from '../pages/admin/AdminReports';
 import AdminActivityLog from '../pages/admin/AdminActivityLog';
@@ -56,7 +56,7 @@ export default function AppRoutes() {
         <Route path="/admin/beneficiaries" element={<AdminBeneficiaries />} />
         <Route path="/admin/beneficiaries/:id/portfolio" element={<AdminPortfolio />} />
         <Route path="/admin/specialists" element={<AdminSpecialists />} />
-        <Route path="/admin/modules" element={<AdminModules />} />
+        <Route path="/admin/modules" element={<AdminModulesPage />} />
         <Route path="/admin/users" element={<AdminUsers />} />
         <Route path="/admin/reports" element={<AdminReports />} />
         <Route path="/admin/activity" element={<AdminActivityLog />} />

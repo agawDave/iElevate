@@ -1,10 +1,53 @@
 const { pool } = require('../config/db');
-const { sessionActions, readSessionInput, announceSessionChange } = require('../lib/moduleSessions');
+const { sessionActions, readSessionInput, announceSessionChange, announceToUsers } = require('../lib/moduleSessions');
 const { logActivity } = require('../lib/activityLog');
+const { offeredSql } = require('../lib/programPhases');
+const { livesAbroad, localSql } = require('../lib/places');
 
-// A learner requests a session with their specialist, or (ELEVATE topics) a
-// specialist requests one with a learner matched to them (body.beneficiaryId).
-// The other person accepts it on their Sessions page.
+// Face-to-face sessions are for beneficiaries in the Philippines.
+const ABROAD_MESSAGE = 'You live outside the Philippines, so you learn online only. Face-to-face sessions are for beneficiaries in the Philippines.';
+
+// Sessions come in two kinds:
+//   - online sessions: automatic, one per day a beneficiary works on a module
+//     (learning_sessions, recorded in lib/learningSessions.js);
+//   - face-to-face sessions: booked here. One-on-one (a learner and their
+//     specialist request and accept), or open (a specialist posts one that any
+//     beneficiary who needs the topic can join).
+
+// A beneficiary "needs" a topic while it's in their plan (applied, matched or
+// waiting for a match) and they have no certificate for it yet.
+const NEEDS_TOPIC_SQL = (moduleColumn) => `EXISTS (SELECT 1 FROM elevate_module_assignments need
+    WHERE need.module_id = ${moduleColumn} AND need.beneficiary_id = ?)
+  AND NOT EXISTS (SELECT 1 FROM module_certificates done WHERE done.module_id = ${moduleColumn} AND done.user_id = ?)`;
+
+const plural = (n, word, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
+
+async function accountOf(userId) {
+  const [[user]] = await pool.query("SELECT user_type, country, full_name FROM users WHERE id = ? AND status = 'active'", [userId]);
+  return user || null;
+}
+
+async function userTypeOf(userId) {
+  return (await accountOf(userId))?.user_type || null;
+}
+
+// The topics a specialist teaches (or still has learners on).
+async function teachingTopics(specialistId) {
+  const [rows] = await pool.query(
+    `SELECT lm.id, lm.title, lm.phase FROM learning_modules lm
+     WHERE lm.is_elevate_program = 1 AND lm.approval_status = 'approved' AND (
+       EXISTS (SELECT 1 FROM module_skills mk JOIN user_skills us ON us.skill_id = mk.skill_id AND us.relation_type = 'teaches' AND us.user_id = ?
+               WHERE mk.module_id = lm.id AND mk.is_primary = 1 AND ${offeredSql('lm')})
+       OR EXISTS (SELECT 1 FROM elevate_module_assignments a WHERE a.module_id = lm.id AND a.specialist_id = ? AND a.assignment_status = 'assigned'))
+     ORDER BY lm.sort_order, lm.id`,
+    [specialistId, specialistId]
+  );
+  return rows;
+}
+
+// A learner requests a face-to-face session with their specialist, or (ELEVATE
+// topics) a specialist requests one with a learner matched to them
+// (body.beneficiaryId). The other person accepts it on their Sessions page.
 async function createModuleSession(req, res) {
   const { moduleId } = req.params;
   const { title } = req.body;
@@ -20,8 +63,7 @@ async function createModuleSession(req, res) {
   let specialistId = module.owner_id;
   let beneficiaryId = req.user.id;
   if (module.is_elevate_program) {
-    const [users] = await pool.query('SELECT user_type FROM users WHERE id = ? AND status = \'active\'', [req.user.id]);
-    const userType = users[0]?.user_type;
+    const userType = await userTypeOf(req.user.id);
     if (userType === 'beneficiary') {
       const [assignments] = await pool.query(
         `SELECT specialist_id FROM elevate_module_assignments
@@ -55,11 +97,20 @@ async function createModuleSession(req, res) {
     );
     if (!connections[0]) return res.status(403).json({ success: false, message: 'Connect to this module before booking a session' });
   }
+  const learner = await accountOf(beneficiaryId);
+  if (livesAbroad(learner?.country)) {
+    return res.status(403).json({
+      success: false,
+      message: Number(beneficiaryId) === Number(req.user.id)
+        ? ABROAD_MESSAGE
+        : `${learner.full_name} lives outside the Philippines, so they learn online only. Face-to-face sessions are for beneficiaries in the Philippines.`,
+    });
+  }
 
   const [result] = await pool.query(
     `INSERT INTO module_sessions (module_id, beneficiary_id, specialist_id, title, starts_at, ends_at, meeting_link, scheduled_by)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [module.id, beneficiaryId, specialistId, (typeof title === 'string' && title.trim().slice(0, 190)) || `${module.title} learning session`,
+    [module.id, beneficiaryId, specialistId, (typeof title === 'string' && title.trim().slice(0, 190)) || `${module.title} face-to-face session`,
       startsAt, endsAt, meetingLink, req.user.id]
   );
   await announceSessionChange(req.app, {
@@ -72,33 +123,177 @@ async function createModuleSession(req, res) {
   res.status(201).json({ success: true, message: 'Session requested. It is booked once they accept it.', data: { sessionId: result.insertId } });
 }
 
-async function listMyModuleSessions(req, res) {
+// A specialist posts an open face-to-face session on a topic they teach.
+// Every beneficiary who needs the topic sees it and can join.
+async function createOpenSession(req, res) {
+  const me = req.user.id;
+  if (await userTypeOf(me) !== 'specialist') return res.status(403).json({ success: false, message: 'Only specialists can post a face-to-face session.' });
+  const topic = (await teachingTopics(me)).find((row) => Number(row.id) === Number(req.body.moduleId));
+  if (!topic) return res.status(403).json({ success: false, message: 'Choose one of the topics you teach.' });
+  const input = readSessionInput(req.body);
+  if (input.error) return res.status(400).json({ success: false, message: input.error });
+  const { startsAt, endsAt, meetingLink, seats } = input.value;
+  const [result] = await pool.query(
+    `INSERT INTO module_sessions (module_id, beneficiary_id, specialist_id, is_open, title, starts_at, ends_at, meeting_link, seats, status, scheduled_by)
+     VALUES (?, NULL, ?, 1, ?, ?, ?, ?, ?, 'confirmed', ?)`,
+    [topic.id, me, `${topic.title} face-to-face session`, startsAt, endsAt, meetingLink, seats, me]
+  );
+  const [interested] = await pool.query(
+    `SELECT DISTINCT a.beneficiary_id AS id FROM elevate_module_assignments a
+     JOIN users u ON u.id = a.beneficiary_id AND u.status = 'active' AND ${localSql('u')}
+     WHERE a.module_id = ? AND NOT EXISTS (SELECT 1 FROM module_certificates mc WHERE mc.module_id = a.module_id AND mc.user_id = a.beneficiary_id)`,
+    [topic.id]
+  );
+  await announceToUsers(req.app, interested.map((row) => row.id), { moduleId: topic.id, actorId: me, kind: 'posted', text: 'posted a face-to-face session' });
+  await logActivity({ userId: me, action: 'session_posted', moduleId: topic.id });
+  res.status(201).json({
+    success: true,
+    message: interested.length
+      ? `Session posted. ${plural(interested.length, 'beneficiary', 'beneficiaries')} who need this topic can see it and join.`
+      : 'Session posted. Beneficiaries who need this topic will see it and can join.',
+    data: { sessionId: result.insertId },
+  });
+}
+
+// Beneficiaries: open face-to-face sessions they can join (topics they need).
+// Specialists: the topics they can post one for.
+async function listOpenSessions(req, res) {
+  const me = req.user.id;
+  const account = await accountOf(me);
+  const userType = account?.user_type || null;
+  if (userType === 'beneficiary' && livesAbroad(account.country)) {
+    return res.json({ success: true, data: { sessions: [], topics: [], onlineOnly: true } });
+  }
+  if (userType === 'specialist') {
+    const topics = await teachingTopics(me);
+    return res.json({ success: true, data: { sessions: [], topics: topics.map((row) => ({ id: row.id, title: row.title, phase: row.phase })) } });
+  }
+  if (userType !== 'beneficiary') return res.json({ success: true, data: { sessions: [], topics: [] } });
   const [rows] = await pool.query(
-    `SELECT ms.id, ms.module_id, ms.beneficiary_id, ms.title, ms.starts_at, ms.ends_at, ms.meeting_link, ms.status,
-            ms.scheduled_by, lm.title AS module_title, u.id AS specialist_id, u.full_name AS specialist_name,
-            beneficiary.id AS beneficiary_id, beneficiary.full_name AS beneficiary_name,
-            IF(ms.beneficiary_id = ?, u.id, beneficiary.id) AS other_user_id,
-            IF(ms.beneficiary_id = ?, u.full_name, beneficiary.full_name) AS other_user_name,
+    `SELECT ms.id, ms.module_id, ms.starts_at, ms.ends_at, ms.meeting_link, ms.seats, lm.title AS module_title, s.full_name AS specialist_name,
+            (SELECT COUNT(*) FROM module_session_attendees sa WHERE sa.session_id = ms.id) AS joined_count
+     FROM module_sessions ms
+     JOIN learning_modules lm ON lm.id = ms.module_id
+     JOIN users s ON s.id = ms.specialist_id
+     WHERE ms.is_open = 1 AND ms.status = 'confirmed' AND ms.starts_at > NOW()
+       AND NOT EXISTS (SELECT 1 FROM module_session_attendees mine WHERE mine.session_id = ms.id AND mine.beneficiary_id = ?)
+       AND ${NEEDS_TOPIC_SQL('ms.module_id')}
+     ORDER BY ms.starts_at`,
+    [me, me, me]
+  );
+  res.json({ success: true, data: { topics: [], onlineOnly: false, sessions: rows.map((row) => {
+    const seats = row.seats === null ? null : Number(row.seats);
+    const joinedCount = Number(row.joined_count);
+    return {
+      moduleSessionId: row.id, moduleId: row.module_id, moduleTitle: row.module_title, specialistName: row.specialist_name,
+      startsAt: row.starts_at, endsAt: row.ends_at, place: row.meeting_link, seats, joinedCount, full: seats !== null && joinedCount >= seats,
+    };
+  }) } });
+}
+
+async function findOpenSession(sessionId) {
+  const [[session]] = await pool.query(
+    `SELECT ms.*, (SELECT COUNT(*) FROM module_session_attendees sa WHERE sa.session_id = ms.id) AS joined_count
+     FROM module_sessions ms WHERE ms.id = ? AND ms.is_open = 1`,
+    [sessionId]
+  );
+  return session || null;
+}
+
+async function joinOpenSession(req, res) {
+  const me = req.user.id;
+  const session = await findOpenSession(req.params.sessionId);
+  if (!session) return res.status(404).json({ success: false, message: 'Session not found.' });
+  if (session.status !== 'confirmed' || new Date(session.starts_at) <= new Date()) {
+    return res.status(409).json({ success: false, message: 'This session has already started or was cancelled.' });
+  }
+  const account = await accountOf(me);
+  if (account?.user_type !== 'beneficiary') return res.status(403).json({ success: false, message: 'Only beneficiaries can join a session.' });
+  if (livesAbroad(account.country)) return res.status(403).json({ success: false, message: ABROAD_MESSAGE });
+  const [[needs]] = await pool.query(`SELECT ${NEEDS_TOPIC_SQL('?')} AS ok`, [session.module_id, me, session.module_id, me]);
+  if (!Number(needs.ok)) return res.status(403).json({ success: false, message: 'This session is for beneficiaries who need this topic.' });
+  if (session.seats !== null && Number(session.joined_count) >= Number(session.seats)) {
+    return res.status(409).json({ success: false, message: 'This session is full.' });
+  }
+  const [result] = await pool.query('INSERT IGNORE INTO module_session_attendees (session_id, beneficiary_id) VALUES (?, ?)', [session.id, me]);
+  if (result.affectedRows) {
+    await logActivity({ userId: me, action: 'session_joined', moduleId: session.module_id, targetUserId: session.specialist_id });
+    await announceToUsers(req.app, [session.specialist_id], { moduleId: session.module_id, actorId: me, kind: 'joined', text: 'joined your face-to-face session' });
+  }
+  res.json({ success: true, message: 'You joined. It is on your list of upcoming sessions.' });
+}
+
+async function leaveOpenSession(req, res) {
+  const me = req.user.id;
+  const session = await findOpenSession(req.params.sessionId);
+  if (!session) return res.status(404).json({ success: false, message: 'Session not found.' });
+  if (session.status !== 'confirmed' || new Date(session.starts_at) <= new Date()) {
+    return res.status(409).json({ success: false, message: 'This session has already started, so you can no longer leave it.' });
+  }
+  const [result] = await pool.query('DELETE FROM module_session_attendees WHERE session_id = ? AND beneficiary_id = ?', [session.id, me]);
+  if (result.affectedRows) await logActivity({ userId: me, action: 'session_left', moduleId: session.module_id, targetUserId: session.specialist_id });
+  res.json({ success: true, message: 'You left the session.' });
+}
+
+// Face-to-face sessions this person is part of: one-on-one, open ones they
+// posted (with who joined), and open ones they joined.
+async function listMyModuleSessions(req, res) {
+  const me = Number(req.user.id);
+  const [rows] = await pool.query(
+    `SELECT ms.id, ms.module_id, ms.beneficiary_id, ms.specialist_id, ms.is_open, ms.seats, ms.title, ms.starts_at, ms.ends_at,
+            ms.meeting_link, ms.status, ms.scheduled_by, lm.title AS module_title,
+            s.full_name AS specialist_name, b.full_name AS beneficiary_name,
+            (SELECT COUNT(*) FROM module_session_attendees sa WHERE sa.session_id = ms.id) AS joined_count,
+            EXISTS (SELECT 1 FROM module_session_attendees sa WHERE sa.session_id = ms.id AND sa.beneficiary_id = ?) AS joined_by_me,
             (SELECT c.id FROM conversations c
              WHERE c.module_id = ms.module_id
                AND c.user_a_id = LEAST(ms.beneficiary_id, ms.specialist_id)
                AND c.user_b_id = GREATEST(ms.beneficiary_id, ms.specialist_id)) AS conversation_id
      FROM module_sessions ms
      JOIN learning_modules lm ON lm.id = ms.module_id
-     JOIN users u ON u.id = ms.specialist_id
-     JOIN users beneficiary ON beneficiary.id = ms.beneficiary_id
-     WHERE ms.beneficiary_id = ? OR ms.specialist_id = ? ORDER BY ms.starts_at ASC`,
-    [req.user.id, req.user.id, req.user.id, req.user.id]
+     JOIN users s ON s.id = ms.specialist_id
+     LEFT JOIN users b ON b.id = ms.beneficiary_id
+     WHERE ms.beneficiary_id = ? OR ms.specialist_id = ?
+        OR EXISTS (SELECT 1 FROM module_session_attendees sa WHERE sa.session_id = ms.id AND sa.beneficiary_id = ?)
+     ORDER BY ms.starts_at ASC`,
+    [me, me, me, me]
   );
-  res.json({ success: true, data: rows.map((row) => ({
-    id: `module-${row.id}`, moduleSessionId: row.id, moduleId: row.module_id, title: row.title,
-    moduleTitle: row.module_title, startsAt: row.starts_at, endsAt: row.ends_at, meetingLink: row.meeting_link,
-    status: row.status, scheduledByMe: Number(row.scheduled_by) === Number(req.user.id), otherUserId: row.other_user_id,
-    otherUserName: row.other_user_name, iTeach: row.module_title, theyTeach: 'Module guidance',
-    isSpecialist: Number(row.specialist_id) === Number(req.user.id),
-    conversationId: row.conversation_id || null,
-    ...sessionActions(row, req.user.id),
-  })) });
+  const [attendeeRows] = await pool.query(
+    `SELECT sa.session_id, sa.beneficiary_id, sa.attended, u.full_name
+     FROM module_session_attendees sa
+     JOIN module_sessions ms ON ms.id = sa.session_id AND ms.specialist_id = ? AND ms.is_open = 1
+     JOIN users u ON u.id = sa.beneficiary_id
+     ORDER BY sa.joined_at`,
+    [me]
+  );
+  const attendeesBy = new Map();
+  attendeeRows.forEach((row) => {
+    const list = attendeesBy.get(Number(row.session_id)) || [];
+    list.push({ id: Number(row.beneficiary_id), name: row.full_name, attended: row.attended === null ? null : Boolean(Number(row.attended)) });
+    attendeesBy.set(Number(row.session_id), list);
+  });
+  const now = new Date();
+  res.json({ success: true, data: rows.map((row) => {
+    const isSpecialist = Number(row.specialist_id) === me;
+    const isOpen = Boolean(Number(row.is_open));
+    const joinedByMe = Boolean(Number(row.joined_by_me));
+    return {
+      id: `module-${row.id}`, moduleSessionId: row.id, moduleId: row.module_id, title: row.title,
+      moduleTitle: row.module_title, startsAt: row.starts_at, endsAt: row.ends_at, meetingLink: row.meeting_link,
+      status: row.status, scheduledByMe: Number(row.scheduled_by) === me,
+      otherUserId: isSpecialist ? row.beneficiary_id : row.specialist_id,
+      otherUserName: isSpecialist ? row.beneficiary_name : row.specialist_name,
+      isSpecialist,
+      isOpen,
+      seats: row.seats === null ? null : Number(row.seats),
+      joinedCount: Number(row.joined_count),
+      joinedByMe,
+      attendees: isSpecialist && isOpen ? attendeesBy.get(Number(row.id)) || [] : undefined,
+      conversationId: row.conversation_id || null,
+      ...sessionActions(row, me),
+      canLeave: isOpen && !isSpecialist && joinedByMe && row.status === 'confirmed' && new Date(row.starts_at) > now,
+    };
+  }) });
 }
 
 const STATUS_RULES = {
@@ -110,7 +305,8 @@ const STATUS_RULES = {
 
 async function updateModuleSessionStatus(req, res) {
   const { sessionId } = req.params;
-  const rule = STATUS_RULES[req.body.status];
+  const { status } = req.body;
+  const rule = STATUS_RULES[status];
   if (!rule) return res.status(400).json({ success: false, message: 'Invalid status' });
   const [rows] = await pool.query(
     'SELECT * FROM module_sessions WHERE id = ? AND (beneficiary_id = ? OR specialist_id = ?)',
@@ -119,17 +315,75 @@ async function updateModuleSessionStatus(req, res) {
   const session = rows[0];
   if (!session) return res.status(403).json({ success: false, message: 'You are not part of this session' });
   if (!sessionActions(session, req.user.id)[rule.allowed]) return res.status(409).json({ success: false, message: rule.refusal });
-  await pool.query('UPDATE module_sessions SET status = ? WHERE id = ?', [req.body.status, sessionId]);
-  await announceSessionChange(req.app, session, req.user.id, req.body.status);
-  await logActivity({
-    userId: req.user.id, action: `session_${req.body.status}`, moduleId: session.module_id,
-    targetUserId: Number(req.user.id) === Number(session.beneficiary_id) ? session.specialist_id : session.beneficiary_id,
-  });
-  res.json({ success: true, message: rule.message });
+  await pool.query('UPDATE module_sessions SET status = ? WHERE id = ?', [status, session.id]);
+
+  if (!Number(session.is_open)) {
+    await announceSessionChange(req.app, session, req.user.id, status);
+    await logActivity({
+      userId: req.user.id, action: `session_${status}`, moduleId: session.module_id,
+      targetUserId: Number(req.user.id) === Number(session.beneficiary_id) ? session.specialist_id : session.beneficiary_id,
+    });
+    return res.json({ success: true, message: rule.message });
+  }
+
+  // Open session: who came (everyone who joined unless the specialist unticks
+  // them), or tell those who joined that it was cancelled.
+  let message = rule.message;
+  if (status === 'completed') {
+    const attended = Array.isArray(req.body.attended) ? req.body.attended.map(Number).filter(Number.isInteger) : null;
+    if (attended) {
+      await pool.query('UPDATE module_session_attendees SET attended = 0 WHERE session_id = ?', [session.id]);
+      if (attended.length) await pool.query('UPDATE module_session_attendees SET attended = 1 WHERE session_id = ? AND beneficiary_id IN (?)', [session.id, attended]);
+    } else {
+      await pool.query('UPDATE module_session_attendees SET attended = 1 WHERE session_id = ?', [session.id]);
+    }
+    const [[came]] = await pool.query('SELECT COUNT(*) AS n FROM module_session_attendees WHERE session_id = ? AND attended = 1', [session.id]);
+    message = `Session marked as done: ${plural(Number(came.n), 'beneficiary', 'beneficiaries')} came.`;
+  } else if (status === 'no_show') {
+    await pool.query('UPDATE module_session_attendees SET attended = 0 WHERE session_id = ?', [session.id]);
+  } else if (status === 'cancelled') {
+    const [joined] = await pool.query('SELECT beneficiary_id FROM module_session_attendees WHERE session_id = ?', [session.id]);
+    await announceToUsers(req.app, joined.map((row) => row.beneficiary_id), {
+      moduleId: session.module_id, actorId: req.user.id, kind: 'cancelled', text: 'cancelled the face-to-face session you joined',
+    });
+  }
+  await logActivity({ userId: req.user.id, action: `session_${status}`, moduleId: session.module_id });
+  res.json({ success: true, message });
+}
+
+// The online sessions (days a beneficiary worked on a module) this person was part of.
+async function listMyLearningSessions(req, res) {
+  const [rows] = await pool.query(
+    `SELECT ls.id, ls.module_id, DATE_FORMAT(ls.session_date, '%Y-%m-%d') AS session_date, ls.started_at, ls.ended_at,
+            ls.answers, ls.pre_test, ls.post_test, ls.specialist_id,
+            lm.title AS module_title, b.full_name AS beneficiary_name, s.full_name AS specialist_name
+     FROM learning_sessions ls
+     JOIN learning_modules lm ON lm.id = ls.module_id
+     JOIN users b ON b.id = ls.beneficiary_id
+     JOIN users s ON s.id = ls.specialist_id
+     WHERE ls.beneficiary_id = ? OR ls.specialist_id = ?
+     ORDER BY ls.session_date DESC, ls.started_at DESC
+     LIMIT 500`,
+    [req.user.id, req.user.id]
+  );
+  res.json({ success: true, data: rows.map((row) => {
+    const isSpecialist = Number(row.specialist_id) === Number(req.user.id);
+    return {
+      id: row.id, moduleId: row.module_id, moduleTitle: row.module_title, date: row.session_date,
+      startedAt: row.started_at, endedAt: row.ended_at, isSpecialist,
+      otherUserName: isSpecialist ? row.beneficiary_name : row.specialist_name,
+      answers: Number(row.answers), preTest: Boolean(row.pre_test), postTest: Boolean(row.post_test),
+    };
+  }) });
 }
 
 module.exports = {
+  listMyLearningSessions,
   createModuleSession,
+  createOpenSession,
+  listOpenSessions,
+  joinOpenSession,
+  leaveOpenSession,
   listMyModuleSessions,
   updateModuleSessionStatus,
 };

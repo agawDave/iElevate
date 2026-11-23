@@ -12,7 +12,7 @@ const COPY = {
     button: 'Save topics',
   },
   teaches: {
-    intro: 'Choose the ELEVATE topics you teach, as listed for you in the training design. Beneficiaries who want these topics are matched to you when your circumstances fit theirs.',
+    intro: 'Choose the ELEVATE topics you teach, as listed for you in the training design. Beneficiaries who want these topics are matched to you when your preferred setup fits theirs.',
     endpoint: '/skills/me/teaching-topics',
     saved: 'Your teaching topics are saved.',
     empty: 'Select at least one topic you teach.',
