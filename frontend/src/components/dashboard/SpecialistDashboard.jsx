@@ -15,17 +15,17 @@ import { MODULE_STATUS, moduleEditorPath } from '../../lib/moduleStatus';
 const TILES = [
   { key: 'learners', label: 'Learners now', icon: 'users', style: 'bg-brand-50 text-brand-600', to: '/modules?tab=ongoing' },
   { key: 'applications', label: 'Applications waiting', icon: 'inbox', style: 'bg-accent-50 text-accent-600', to: '/modules?tab=incoming', alert: true },
-  { key: 'answersToRead', label: 'Answers to read', icon: 'doc', style: 'bg-amber-50 text-amber-700', to: '/modules?tab=ongoing', alert: true },
+  { key: 'postTestsToOpen', label: 'Post-tests to open', icon: 'doc', style: 'bg-amber-50 text-amber-700', to: '/modules?tab=ongoing', alert: true },
   { key: 'certificates', label: 'Certificates issued', icon: 'award', style: 'bg-emerald-50 text-emerald-600', to: '/modules?tab=completed' },
 ];
 
 
 function LearnerRow({ learner }) {
-  const { done, total } = learner.activities;
+  const hours = learner.faceToFace;
   const chat = `/modules?tab=ongoing&chat=${learner.conversationId}`;
   const badges = [
     learner.awaitingReply && { label: 'Waiting for your reply', style: 'bg-amber-50 text-amber-800' },
-    learner.toRead > 0 && { label: `${learner.toRead} to read`, style: 'bg-amber-50 text-amber-800' },
+    learner.canOpenPostTest && { label: 'Open the post-test', style: 'bg-amber-50 text-amber-800' },
     learner.readyToComplete && { label: 'Ready to complete', style: 'bg-emerald-50 text-emerald-700' },
   ].filter(Boolean);
   const testLine = learner.test && `Pre-test ${learner.test.pre ? `${learner.test.pre.score}/${learner.test.pre.total}` : '—'} → Post-test ${learner.test.post ? `${learner.test.post.score}/${learner.test.post.total}` : '—'}`;
@@ -41,15 +41,12 @@ function LearnerRow({ learner }) {
         </div>
         <p className="truncate text-xs text-slate-500">{learner.topic}{testLine ? ` · ${testLine}` : ''}</p>
         <div className="mt-2 flex items-center gap-3">
-          {total > 0 ? (
+          {hours?.hours > 0 && !hours.onlineOnly ? (
             <>
-              <ProgressBar done={done} total={total} label={`${learner.name}: ${learner.topic} activities done`} />
-              <span className="shrink-0 text-xs tabular-nums text-slate-600">{done} of {total} activities</span>
+              <ProgressBar done={Math.min(hours.hoursDone, hours.hours)} total={hours.hours} label={`${learner.name}: ${learner.topic} face-to-face hours`} />
+              <span className="shrink-0 text-xs tabular-nums text-slate-600">{hours.hoursDone} of {hours.hours} hours</span>
             </>
-          ) : <span className="flex-1 text-xs text-slate-500">No activities yet</span>}
-          {(total > 0 || learner.test) && (
-            <Link to={`/modules?tab=ongoing&answers=${learner.moduleId}:${learner.beneficiaryId}`} className={smallButton}>Answers</Link>
-          )}
+          ) : <span className="flex-1 text-xs text-slate-500">Online</span>}
           <Link to={chat} className={smallButton}>Chat{learner.unread ? ` (${learner.unread})` : ''}</Link>
         </div>
       </div>
@@ -77,13 +74,10 @@ function TopicRow({ topic }) {
         </div>
         {MODULE_ACTIONS[status]
           ? <Link to={moduleEditorPath(topic.moduleId)} className="shrink-0 rounded-lg bg-accent-500 px-3 py-1 text-xs font-bold text-brand-900 hover:bg-accent-550">{MODULE_ACTIONS[status]}</Link>
-          : <Link to={`/modules?activities=${topic.moduleId}`} className={smallButton}>Activities</Link>}
+          : <Link to={`/modules?tests=${topic.moduleId}`} className={smallButton}>Pre/post-test</Link>}
       </div>
       <p className="mt-1 flex flex-wrap gap-2 text-[12px] font-semibold">
         <span className={`rounded-full px-2 py-0.5 ${statusInfo.style}`}>{statusInfo.label}</span>
-        {topic.activities
-          ? <span className="rounded-full bg-stone-100 px-2 py-0.5 text-slate-600">{topic.activities} activit{topic.activities === 1 ? 'y' : 'ies'}</span>
-          : <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">No activities yet</span>}
         {topic.testQuestions
           ? <span className="rounded-full bg-stone-100 px-2 py-0.5 text-slate-600">Pre/post-test: {topic.testQuestions} question{topic.testQuestions === 1 ? '' : 's'}</span>
           : <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">No pre/post-test yet</span>}

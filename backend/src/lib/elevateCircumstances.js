@@ -12,6 +12,8 @@ const MODE_LABELS = {
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const DAY_LABELS = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
 const TIME_BLOCKS = ['morning', 'afternoon', 'evening'];
+// The hours of each block in Philippine time, as the Preferred setup form shows them.
+const TIME_BLOCK_HOURS = { morning: [8, 12], afternoon: [13, 17], evening: [18, 21] };
 const AVAILABILITY_SLOTS = DAYS.flatMap((day) => TIME_BLOCKS.map((time) => `${day}-${time}`));
 const DEVICE_ACCESS = ['computer', 'smartphone', 'none'];
 const INTERNET_ACCESS = ['stable', 'slow', 'none'];
@@ -155,6 +157,17 @@ function describeSlots(slots) {
     .join(', ');
 }
 
+// True when a session fits inside one free block, like "wed-morning" (8 AM to 12 NN).
+// Free times are in Philippine time: UTC+8, with no daylight saving.
+function fitsFreeTime(slots, startsAt, endsAt) {
+  const start = new Date(startsAt.getTime() + 8 * 3600000);
+  const day = DAYS[(start.getUTCDay() + 6) % 7];
+  const from = start.getUTCHours() + start.getUTCMinutes() / 60;
+  const to = from + (endsAt - startsAt) / 3600000;
+  return TIME_BLOCKS.some((time) => slots.includes(`${day}-${time}`)
+    && from >= TIME_BLOCK_HOURS[time][0] && to <= TIME_BLOCK_HOURS[time][1]);
+}
+
 // Compares one beneficiary with one specialist who teaches the topic.
 // Unknown circumstances (not filled in yet) neither block nor add to a match.
 function evaluateMatch(learner, specialist) {
@@ -229,6 +242,7 @@ module.exports = {
   evaluateMatch,
   describeWaiting,
   describeSlots,
+  fitsFreeTime,
   cleanBarangay,
   MAX_BARANGAY_LENGTH,
 };

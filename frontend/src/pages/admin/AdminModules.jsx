@@ -12,7 +12,6 @@ const TABS = [
   { value: 'approved', label: 'Approved' },
   { value: 'changes_requested', label: 'Changes requested' },
 ];
-const ACTIVITY_TYPES = { multiple_choice: 'multiple choice', written: 'written', file: 'file task' };
 const MATERIAL_TYPES = { pdf: 'PDF', docx: 'Document', video: 'Video', link: 'Link', xlsx: 'Spreadsheet', pptx: 'Slides' };
 
 function Section({ title, children }) {
@@ -81,13 +80,6 @@ function ModuleReview({ moduleId, onReviewed }) {
               <li key={item.id} className="flex gap-2"><span className="w-20 shrink-0 text-xs font-semibold uppercase text-slate-500">{MATERIAL_TYPES[item.type] || item.type}</span><span className="min-w-0 break-words">{item.title}{item.url ? <span className="block truncate text-xs text-slate-500">{item.url}</span> : null}</span></li>
             ))}
           </ul>
-        ) : <p className="text-slate-500">None</p>}
-      </Section>
-      <Section title={`Activities (${module.activities.length})`}>
-        {module.activities.length ? (
-          <ol className="list-decimal space-y-1 pl-5">
-            {module.activities.map((item) => <li key={item.id}><span className="line-clamp-2 whitespace-pre-line">{item.prompt}</span> <span className="text-xs text-slate-500">({ACTIVITY_TYPES[item.type] || item.type})</span></li>)}
-          </ol>
         ) : <p className="text-slate-500">None</p>}
       </Section>
       <Section title="Pre/post-test">{module.testQuestions ? `${module.testQuestions} question${module.testQuestions === 1 ? '' : 's'}` : 'None'}</Section>

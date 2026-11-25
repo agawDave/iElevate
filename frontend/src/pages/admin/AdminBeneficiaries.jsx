@@ -5,6 +5,7 @@ import axiosClient from '../../api/axiosClient';
 import { formatPlace } from '../../lib/places';
 import { openCertificate } from '../../lib/certificates';
 import { SkeletonLines } from '../../components/ui/Skeleton';
+import DirectChatPanel, { MessageButton } from '../../components/chat/DirectChatPanel';
 import {
   AdminHeader,
   DateCell,
@@ -30,7 +31,6 @@ const SEX_LABELS = { female: 'Female', male: 'Male', prefer_not_to_say: 'Prefer 
 const CIVIL_LABELS = { single: 'Single', married: 'Married', widowed: 'Widowed', separated: 'Separated' };
 const EDUCATION_LABELS = { elementary: 'Elementary', high_school: 'High school', senior_high: 'Senior high school', vocational: 'Vocational / TESDA', college_level: 'College level', college_graduate: 'College graduate', postgraduate: 'Postgraduate' };
 const WORK_LABELS = { unemployed: 'Unemployed', employed: 'Employed', self_employed: 'Self-employed', student: 'Student' };
-const GOAL_LABELS = { job: 'Get hired (office / BPO)', freelance: 'Freelance / virtual assistant', business: 'Own online business', undecided: 'Not sure yet' };
 const PROGRESS_LABELS = { incoming: 'Incoming', ongoing: 'Ongoing', completed: 'Completed' };
 const ASSIGNMENT_LABELS = { suggested: 'Not applied yet', waiting: 'Waiting for a specialist', queued: 'Next up' };
 
@@ -39,7 +39,7 @@ function placeOf(row) {
     || [row.barangay && `Brgy. ${row.barangay}`, row.city, row.province].filter(Boolean).join(', ');
 }
 
-function BeneficiaryDetail({ id }) {
+function BeneficiaryDetail({ id, onChat }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [fileError, setFileError] = useState('');
@@ -54,9 +54,12 @@ function BeneficiaryDetail({ id }) {
   return (
     <div className="space-y-6">
       <ProfileHeader name={data.full_name} email={data.email} src={data.avatar_url} status={data.status} />
-      <Link to={`/admin/beneficiaries/${id}/portfolio`} className="inline-block rounded-lg border border-brand-600 px-3.5 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50">
-        View learning portfolio
-      </Link>
+      <div className="flex flex-wrap items-center gap-2">
+        <MessageButton userId={id} onOpen={onChat} />
+        <Link to={`/admin/beneficiaries/${id}/portfolio`} className="inline-block rounded-lg border border-brand-600 px-3.5 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50">
+          View learning portfolio
+        </Link>
+      </div>
       <section>
         <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-accent-600">Profile</h3>
         <dl>
@@ -76,11 +79,10 @@ function BeneficiaryDetail({ id }) {
       <section>
         <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-accent-600">Learning plan</h3>
         <dl>
-          <DetailRow label="Main goal">{GOAL_LABELS[data.goal_track]}</DetailRow>
+          <DetailRow label="Main goal">{data.goal_label}</DetailRow>
           <DetailRow label="Pre-assessment taken">{formatDate(data.skill_check_at)}</DetailRow>
           <DetailRow label="Device / internet">{[data.device_access, data.internet_access].filter(Boolean).join(' · ')}</DetailRow>
           <DetailRow label="Learning modes">{data.learning_modes.join(', ').replace(/_/g, '-')}</DetailRow>
-          <DetailRow label="Told us">{data.notes && <span className="whitespace-pre-line">{data.notes}</span>}</DetailRow>
         </dl>
       </section>
       <section>
@@ -123,13 +125,14 @@ export default function AdminBeneficiaries() {
   const directory = useDirectory('/admin/beneficiaries', { sort: 'newest' });
   const { rows, pagination, extra, loading, error, params, setParam, clearAll } = directory;
   const [selected, setSelected] = useState(null);
+  const [chat, setChat] = useState(null);
   const topics = extra.filters?.topics || [];
   const counts = extra.counts || {};
   const filtered = Object.keys(params).some((key) => !['sort', 'page', 'match'].includes(key));
   const moreActive = ['topicId', 'sex', 'sector'].filter((key) => params[key]).length;
 
   const columns = [
-    { key: 'name', label: 'Beneficiary', render: (row) => <PersonCell name={row.full_name} detail={row.email} status={row.status} avatar={row.avatar_url} /> },
+    { key: 'name', label: 'Beneficiary', render: (row) => <div className="flex items-center gap-2"><PersonCell name={row.full_name} detail={row.email} status={row.status} avatar={row.avatar_url} />{row.unread_messages > 0 && <span className="shrink-0 rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">{row.unread_messages}<span className="sr-only"> unread messages</span></span>}</div> },
     { key: 'place', label: 'Address', render: (row) => <span className="text-slate-700">{[row.barangay, row.city].filter(Boolean).join(', ') || '—'}</span> },
     { key: 'demo', label: 'Sex · age', render: (row) => [SEX_LABELS[row.sex], row.age].filter(Boolean).join(' · ') || '—' },
     { key: 'topics_matched', label: 'Matched', align: 'right' },
@@ -151,6 +154,7 @@ export default function AdminBeneficiaries() {
               { value: '', label: 'All', count: counts.everyone },
               { value: 'waiting', label: 'Topic waiting', count: counts.waiting, alert: counts.waiting > 0 },
               { value: 'none', label: 'No topics yet', count: counts.none },
+              { value: 'messages', label: 'Messages', count: counts.messages, alert: counts.unread > 0 },
             ]}
           />
         )}
@@ -174,14 +178,15 @@ export default function AdminBeneficiaries() {
           error={error}
           onRowClick={(row) => setSelected(row)}
           selectedKey={selected?.id}
-          emptyText={filtered ? 'No beneficiaries match these filters.' : 'No beneficiaries yet.'}
+          emptyText={filtered ? 'No beneficiaries match these filters.' : params.match === 'messages' ? 'No beneficiary has replied yet. Write to one with Message in their View panel.' : 'No beneficiaries yet.'}
         />
         <Pagination pagination={pagination} onPage={(page) => setParam('page', String(page))} noun="beneficiaries" />
       </section>
 
       <DetailPanel open={Boolean(selected)} title={selected?.full_name || ''} onClose={() => setSelected(null)}>
-        {selected && <BeneficiaryDetail id={selected.id} />}
+        {selected && <BeneficiaryDetail id={selected.id} onChat={setChat} />}
       </DetailPanel>
+      {chat && <DirectChatPanel conversation={chat} subtitle="Beneficiary" onClose={() => { setChat(null); directory.reload(); }} onChanged={() => window.dispatchEvent(new Event('admin-counts-changed'))} />}
     </AppLayout>
   );
 }

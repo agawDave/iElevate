@@ -33,6 +33,15 @@ async function loadPhases(connection = pool) {
   return rows.map((row) => ({ number: Number(row.number), name: row.name, year: row.year === null ? null : Number(row.year) }));
 }
 
+// The answers to "What is your main goal in joining ELEVATE?", which the admin
+// manages (table program_goals). Modules list the goals that need them; the
+// "Not sure yet" answer always comes last and has a startPhase the admin picks
+// (a phase number, or 0 = all phases). Normal goals have startPhase null.
+async function loadGoals(connection = pool) {
+  const [rows] = await connection.query('SELECT value, label, start_phase FROM program_goals ORDER BY start_phase IS NOT NULL, id');
+  return rows.map((row) => ({ value: row.value, label: row.label, startPhase: row.start_phase === null ? null : Number(row.start_phase) }));
+}
+
 // The offered modules as the pre-assessment uses them, in the training design's order:
 // { code, moduleId, slug, title, phase, skillId, task, goals, needs, computerBased, foundation, note }.
 async function loadProgramTopics(connection = pool) {
@@ -82,4 +91,4 @@ async function loadPrerequisiteSlugs(connection = pool) {
   return bySlug;
 }
 
-module.exports = { phaseLabel, phaseNumber, offeredSql, offeredOrInUseSql, parseGoals, loadPhases, loadProgramTopics, loadPrerequisiteSlugs };
+module.exports = { phaseLabel, phaseNumber, offeredSql, offeredOrInUseSql, parseGoals, loadPhases, loadGoals, loadProgramTopics, loadPrerequisiteSlugs };

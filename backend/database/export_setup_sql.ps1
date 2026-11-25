@@ -25,7 +25,7 @@ $about = @{
   career_entries               = "Work and education lines in a beneficiary's career portfolio."
   career_profiles              = "Each beneficiary's career portfolio: objective, other skills, and their resume (built by iELEVATE or uploaded)."
   career_recommendations       = 'Recommendations beneficiaries ask their specialists for, with what the specialist wrote, or that they declined.'
-  conversations                = 'Chats between two people, usually a beneficiary and their specialist about a topic.'
+  conversations                = 'Chats between two people: a beneficiary and their specialist about a topic, or the admin and a beneficiary or specialist (module_id empty).'
   elevate_application_declines = 'Specialists who declined a beneficiary for a topic, so the beneficiary goes to the next specialist who fits.'
   elevate_learner_profiles     = "The skill check's questions about the beneficiary: goal, computer experience, phases already done, and background."
   elevate_module_assignments   = 'Each beneficiary''s ELEVATE topics and where they are with each one: suggested, applied, accepted, waiting, with which specialist and why.'
@@ -39,11 +39,13 @@ $about = @{
   module_resources             = 'Materials for a topic: the official ELEVATE program documents, and the files and links specialists add.'
   module_sessions              = 'Face-to-face sessions for a topic: one-on-one (a specialist and a beneficiary) or open (posted by a specialist for anyone who needs the topic), with when, where, seats and the status.'
   module_session_attendees     = 'Beneficiaries who joined an open face-to-face session, and whether they came.'
-  learning_sessions            = 'Online sessions: one per beneficiary, module and day the beneficiary worked on it online (activity answers, topic tests).'
+  learning_sessions            = 'Online sessions: one each time a beneficiary takes a topic''s pre-test or post-test or answers an activity.'
   module_skills                = 'Which skill each ELEVATE topic teaches (links learning_modules to skills).'
   module_test_attempts         = "Beneficiaries' pre-test and post-test scores, each with a copy of the questions as they were."
   module_test_questions        = 'The pre-test and post-test questions a specialist writes for a topic.'
   module_prerequisites         = 'Which modules a module needs first (a topic waits as "next up" until the beneficiary can do them).'
+  notifications                = 'The notification bell: face-to-face session notices for each person (requested, accepted, cancelled, posted, joined), and when they read each one.'
+  program_goals                = 'The answers to the pre-assessment''s "What is your main goal in joining ELEVATE?" question, managed by the admin; modules list the goals that need them (learning_modules.goal_tracks), and "Not sure yet" asks about the phase in start_phase (0 = all phases; normal goals leave it empty).'
   program_phases               = 'The ELEVATE phases: number, name and the year each was created (its modules have learning_modules.phase).'
   portfolio_items              = 'What beneficiaries add to their portfolio: projects, awards, photos, licenses, trainings and letters.'
   skill_categories             = 'Groups of skills: the ELEVATE phases.'
@@ -64,6 +66,7 @@ $reference = [ordered]@{
   module_skills    = @{ about = 'Which skill each ELEVATE topic teaches.' }
   module_prerequisites = @{ about = 'Which modules a module needs first.' }
   program_phases       = @{ about = 'The ELEVATE phases, with the year each was created.' }
+  program_goals        = @{ about = 'The main goals beneficiaries choose from in the pre-assessment.' }
   module_resources = @{ about = 'The official ELEVATE program documents. Files and links people added are left out.'; where = 'uploaded_by IS NULL' }
 }
 

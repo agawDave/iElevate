@@ -78,7 +78,6 @@ async function listOptions(req, res) {
   const [moduleRows] = topicIds.length && ids.length
     ? await pool.query(
       `SELECT sm.topic_id, sm.specialist_id, sm.title, sm.overview, sm.hours,
-              (SELECT COUNT(*) FROM module_activities a WHERE a.module_id = sm.topic_id AND a.specialist_id = sm.specialist_id) AS activities,
               (SELECT COUNT(*) FROM module_test_questions q WHERE q.module_id = sm.topic_id AND q.specialist_id = sm.specialist_id) AS test_questions
        FROM specialist_modules sm
        WHERE sm.status = 'approved' AND sm.topic_id IN (?) AND sm.specialist_id IN (?)`,
@@ -101,7 +100,6 @@ async function listOptions(req, res) {
           title: module.title,
           overview: module.overview,
           hours: Number(module.hours) || 0,
-          activities: Number(module.activities),
           testQuestions: Number(module.test_questions),
         } : null,
       };
@@ -179,14 +177,13 @@ async function listIncoming(req, res) {
   const [rows] = await pool.query(
     `SELECT a.beneficiary_id, a.module_id, a.applied_at, a.match_reasons,
             lm.title AS module_title, lm.phase, learner.full_name AS learner_name, learner.avatar_url,
-            learner.city, learner.province, profile.notes,
+            learner.city, learner.province,
             (SELECT sa.band FROM elevate_skill_assessments sa
              WHERE sa.user_id = a.beneficiary_id AND sa.skill_id = a.matched_skill_id
              ORDER BY sa.attempt DESC LIMIT 1) AS band
      FROM elevate_module_assignments a
      JOIN learning_modules lm ON lm.id = a.module_id
      JOIN users learner ON learner.id = a.beneficiary_id AND learner.status = 'active'
-     LEFT JOIN elevate_learner_profiles profile ON profile.user_id = a.beneficiary_id
      WHERE a.specialist_id = ? AND a.assignment_status = 'pending'
      ORDER BY a.applied_at ASC, lm.sort_order ASC`,
     [req.user.id]
@@ -203,7 +200,6 @@ async function listIncoming(req, res) {
       place: [row.city, row.province].filter(Boolean).join(', '),
       appliedAt: row.applied_at,
       band: row.band || null,
-      notes: row.notes || '',
       reasons: (() => { try { return JSON.parse(row.match_reasons || '[]'); } catch { return []; } })(),
     })),
   });

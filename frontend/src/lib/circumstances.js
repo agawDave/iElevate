@@ -30,9 +30,9 @@ export const DAYS = [
 ];
 
 export const TIME_BLOCKS = [
-  { value: 'morning', label: 'Morning', hint: '8 AM – 12 NN' },
-  { value: 'afternoon', label: 'Afternoon', hint: '1 – 5 PM' },
-  { value: 'evening', label: 'Evening', hint: '6 – 9 PM' },
+  { value: 'morning', label: 'Morning', hint: '8 AM – 12 NN', from: 8, to: 12 },
+  { value: 'afternoon', label: 'Afternoon', hint: '1 – 5 PM', from: 13, to: 17 },
+  { value: 'evening', label: 'Evening', hint: '6 – 9 PM', from: 18, to: 21 },
 ];
 
 export const DEVICE_OPTIONS = [
@@ -51,4 +51,29 @@ export const INTERNET_OPTIONS = [
 
 export function slotKey(day, time) {
   return `${day}-${time}`;
+}
+
+// "Mon, Wed morning (8 AM – 12 NN) · Sat evening (6 – 9 PM)"
+export function describeFreeTimes(slots) {
+  return TIME_BLOCKS.map((time) => {
+    const days = DAYS.filter((day) => slots.includes(slotKey(day.value, time.value))).map((day) => day.label);
+    return days.length ? `${days.join(', ')} ${time.label.toLowerCase()} (${time.hint})` : null;
+  }).filter(Boolean).join(' · ');
+}
+
+// Start times every 30 minutes where a session of this length fits inside a
+// free block on that date ("2026-11-25"). Philippine time (UTC+8), like the server check.
+export function freeStartTimes(slots, date, minutes, now = Date.now()) {
+  if (!date) return [];
+  const day = DAYS[(new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7].value;
+  return TIME_BLOCKS.filter((time) => slots.includes(slotKey(day, time.value))).flatMap((block) => {
+    const starts = [];
+    for (let m = block.from * 60; m + minutes <= block.to * 60; m += 30) {
+      const hour = Math.floor(m / 60);
+      const value = `${String(hour).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+      const label = `${((hour + 11) % 12) + 1}:${String(m % 60).padStart(2, '0')} ${hour < 12 ? 'AM' : 'PM'}`;
+      if (new Date(`${date}T${value}:00+08:00`).getTime() > now) starts.push({ value, label, block });
+    }
+    return starts;
+  });
 }

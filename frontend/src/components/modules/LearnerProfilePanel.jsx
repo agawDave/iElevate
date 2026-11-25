@@ -7,7 +7,6 @@ import {
   BAND_STYLES,
   DEVICE_LABELS,
   EDUCATION_LABELS,
-  GOAL_LABELS,
   INTERNET_LABELS,
   SEX_LABELS,
   WORK_LABELS,
@@ -143,9 +142,8 @@ export default function LearnerProfilePanel({ beneficiaryId, onClose }) {
 
           <Section title="Learning">
             <dl>
-              <DetailRow label="Main goal">{GOAL_LABELS[data.learning.goalTrack]}</DetailRow>
+              <DetailRow label="Main goal">{data.learning.goalLabel}</DetailRow>
               <DetailRow label="Used a computer">{data.learning.usedComputer === null ? null : data.learning.usedComputer ? 'Yes' : 'Not yet'}</DetailRow>
-              <DetailRow label="They told us">{data.learning.notes && <span className="whitespace-pre-line italic">&ldquo;{data.learning.notes}&rdquo;</span>}</DetailRow>
               <DetailRow label="Can attend">{modes}</DetailRow>
               <DetailRow label="Device">{DEVICE_LABELS[data.learning.deviceAccess]}</DetailRow>
               <DetailRow label="Internet">{INTERNET_LABELS[data.learning.internetAccess]}</DetailRow>

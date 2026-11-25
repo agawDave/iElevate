@@ -1,5 +1,6 @@
 const { pool } = require('../config/db');
 const { offeredOrInUseSql } = require('../lib/programPhases');
+const { loadFaceToFace } = require('../lib/moduleTests');
 
 // Tracking and reporting for the admin: the activity log, and reports on
 // participation, progress and completed engagements.
@@ -15,8 +16,6 @@ const ACTIONS = [
   'module_submitted', 'module_approved', 'module_changes_requested',
   'training_design',
 ];
-const SEXES = ['female', 'male', 'prefer_not_to_say'];
-const SECTORS = ['pwd', 'four_ps', 'indigenous', 'solo_parent', 'out_of_school_youth'];
 const DAY = 24 * 60 * 60 * 1000;
 const MAX_SPAN_DAYS = 3 * 366;
 // Face-to-face attendance, one row per beneficiary who came: a one-on-one
@@ -135,21 +134,11 @@ function readFilters(query) {
   return {
     phase: typeof query.phase === 'string' && query.phase.trim() ? query.phase.trim().slice(0, 100) : '',
     moduleId: Number.parseInt(query.moduleId, 10) || null,
-    city: typeof query.city === 'string' && query.city.trim() ? query.city.trim().slice(0, 100) : '',
-    sex: SEXES.includes(query.sex) ? query.sex : '',
-    sector: SECTORS.includes(query.sector) ? query.sector : '',
   };
 }
 
-// Which beneficiaries the report covers (alias = a users row).
-function learnerSql(alias, filters) {
-  const parts = [`${alias}.user_type = 'beneficiary'`, `${alias}.role NOT IN ('admin', 'moderator')`];
-  const params = [];
-  if (filters.city) { parts.push(`${alias}.city = ?`); params.push(filters.city); }
-  if (filters.sex) { parts.push(`${alias}.sex = ?`); params.push(filters.sex); }
-  if (filters.sector) { parts.push(`${alias}.sector_tags LIKE ?`); params.push(`%"${filters.sector}"%`); }
-  return { sql: parts.join(' AND '), params };
-}
+// Which beneficiaries the report covers (b = a users row).
+const LEARNERS = "b.user_type = 'beneficiary' AND b.role NOT IN ('admin', 'moderator')";
 
 // Which topics the report covers (alias = a learning_modules row).
 function topicSql(alias, filters) {
@@ -237,7 +226,6 @@ async function getReport(req, res) {
   const range = readRange(req.query);
   if (range.error) return res.status(400).json({ success: false, message: range.error });
   const filters = readFilters(req.query);
-  const L = learnerSql('b', filters);
   const T = topicSql('lm', filters);
   const topicFiltered = Boolean(filters.phase || filters.moduleId);
   const inRange = (column) => `${column} >= ? AND ${column} < ?`;
@@ -248,11 +236,11 @@ async function getReport(req, res) {
   const logEvents = (action, who = 'l.user_id', withTopic = true) => q(
     `SELECT DATE_FORMAT(l.created_at, '%Y-%m-%d') AS day, COUNT(*) AS n
      FROM user_activity_log l
-     JOIN users b ON b.id = ${who} AND ${L.sql}
+     JOIN users b ON b.id = ${who} AND ${LEARNERS}
      ${withTopic ? `JOIN learning_modules lm ON lm.id = l.module_id AND ${T.sql}` : ''}
      WHERE l.action = ? AND ${inRange('l.created_at')}
      GROUP BY day`,
-    [...L.params, ...(withTopic ? T.params : []), action, ...R]
+    [...(withTopic ? T.params : []), action, ...R]
   );
 
   const [
@@ -264,35 +252,35 @@ async function getReport(req, res) {
        FROM messages m
        JOIN conversations c ON c.id = m.conversation_id
        JOIN learning_modules lm ON lm.id = c.module_id AND ${T.sql}
-       JOIN users b ON (b.id = c.user_a_id OR b.id = c.user_b_id) AND ${L.sql}
+       JOIN users b ON (b.id = c.user_a_id OR b.id = c.user_b_id) AND ${LEARNERS}
        WHERE ${inRange('m.created_at')}
-       GROUP BY day`, [...T.params, ...L.params, ...R]),
+       GROUP BY day`, [...T.params, ...R]),
     logEvents('activity_answered'),
     // Face-to-face sessions held (that a filtered beneficiary came to), and how many came.
     q(`SELECT DATE_FORMAT(f.starts_at, '%Y-%m-%d') AS day, COUNT(DISTINCT f.session_id) AS n
        FROM ${FACE_TO_FACE_SQL} f
        JOIN learning_modules lm ON lm.id = f.module_id AND ${T.sql}
-       JOIN users b ON b.id = f.beneficiary_id AND ${L.sql}
-       WHERE ${inRange('f.starts_at')} GROUP BY day`, [...T.params, ...L.params, ...R]),
+       JOIN users b ON b.id = f.beneficiary_id AND ${LEARNERS}
+       WHERE ${inRange('f.starts_at')} GROUP BY day`, [...T.params, ...R]),
     q(`SELECT DATE_FORMAT(f.starts_at, '%Y-%m-%d') AS day, COUNT(*) AS n
        FROM ${FACE_TO_FACE_SQL} f
        JOIN learning_modules lm ON lm.id = f.module_id AND ${T.sql}
-       JOIN users b ON b.id = f.beneficiary_id AND ${L.sql}
-       WHERE ${inRange('f.starts_at')} GROUP BY day`, [...T.params, ...L.params, ...R]),
-    // Online sessions: days a beneficiary worked on a module (answers, topic tests).
-    q(`SELECT DATE_FORMAT(ls.session_date, '%Y-%m-%d') AS day, COUNT(*) AS n
+       JOIN users b ON b.id = f.beneficiary_id AND ${LEARNERS}
+       WHERE ${inRange('f.starts_at')} GROUP BY day`, [...T.params, ...R]),
+    // Online sessions: each topic test taken and activity answered.
+    q(`SELECT DATE_FORMAT(ls.held_at, '%Y-%m-%d') AS day, COUNT(*) AS n
        FROM learning_sessions ls
        JOIN learning_modules lm ON lm.id = ls.module_id AND ${T.sql}
-       JOIN users b ON b.id = ls.beneficiary_id AND ${L.sql}
-       WHERE ${inRange('ls.session_date')} GROUP BY day`, [...T.params, ...L.params, ...R]),
+       JOIN users b ON b.id = ls.beneficiary_id AND ${LEARNERS}
+       WHERE ${inRange('ls.held_at')} GROUP BY day`, [...T.params, ...R]),
     logEvents('applied'),
     logEvents('accepted', 'l.target_user_id'),
     q(`SELECT DATE_FORMAT(mc.issued_at, '%Y-%m-%d') AS day, COUNT(*) AS n
        FROM module_certificates mc
        JOIN learning_modules lm ON lm.id = mc.module_id AND ${T.sql}
-       JOIN users b ON b.id = mc.user_id AND ${L.sql}
-       WHERE ${inRange('mc.issued_at')} GROUP BY day`, [...T.params, ...L.params, ...R]),
-    q(`SELECT COUNT(*) AS n FROM users b WHERE ${L.sql} AND ${inRange('b.created_at')}`, [...L.params, ...R]),
+       JOIN users b ON b.id = mc.user_id AND ${LEARNERS}
+       WHERE ${inRange('mc.issued_at')} GROUP BY day`, [...T.params, ...R]),
+    q(`SELECT COUNT(*) AS n FROM users b WHERE ${LEARNERS} AND ${inRange('b.created_at')}`, R),
     // Specialists who did something (signing up alone doesn't count).
     q(`SELECT COUNT(DISTINCT l.user_id) AS n FROM user_activity_log l
        JOIN users s ON s.id = l.user_id AND s.user_type = 'specialist' AND s.role NOT IN ('admin', 'moderator')
@@ -307,8 +295,8 @@ async function getReport(req, res) {
     q(`SELECT b.id, b.full_name, b.email, b.sex, b.age, DATE_FORMAT(b.birthdate, '%Y-%m-%d') AS birthdate,
               b.city, b.sector_tags, b.status, c.barangay, b.created_at
        FROM users b LEFT JOIN user_learning_circumstances c ON c.user_id = b.id
-       WHERE ${L.sql} AND b.status <> 'deleted'
-       ORDER BY b.full_name LIMIT 5000`, L.params),
+       WHERE ${LEARNERS} AND b.status <> 'deleted'
+       ORDER BY b.full_name LIMIT 5000`, []),
     q(`SELECT l.user_id AS id, COUNT(*) AS n FROM user_activity_log l
        WHERE l.action = 'login' AND ${inRange('l.created_at')} GROUP BY l.user_id`, R),
     q(`SELECT m.sender_id AS id, COUNT(*) AS n FROM messages m
@@ -320,7 +308,7 @@ async function getReport(req, res) {
        WHERE l.action = 'activity_answered' AND ${inRange('l.created_at')} GROUP BY l.user_id`, [...T.params, ...R]),
     q(`SELECT ls.beneficiary_id AS id, COUNT(*) AS n FROM learning_sessions ls
        JOIN learning_modules lm ON lm.id = ls.module_id AND ${T.sql}
-       WHERE ${inRange('ls.session_date')} GROUP BY ls.beneficiary_id`, [...T.params, ...R]),
+       WHERE ${inRange('ls.held_at')} GROUP BY ls.beneficiary_id`, [...T.params, ...R]),
     q(`SELECT f.beneficiary_id AS id, COUNT(*) AS n FROM ${FACE_TO_FACE_SQL} f
        JOIN learning_modules lm ON lm.id = f.module_id AND ${T.sql}
        WHERE ${inRange('f.starts_at')} GROUP BY f.beneficiary_id`, [...T.params, ...R]),
@@ -367,72 +355,61 @@ async function getReport(req, res) {
   const demographics = {
     sex: { all: countBy(participationRows, (row) => row.sex || 'not_given'), active: countBy(activeRows, (row) => row.sex || 'not_given') },
     age: { all: countBy(participationRows, (row) => ageGroup(row.age)), active: countBy(activeRows, (row) => ageGroup(row.age)) },
-    sector: {
-      all: countBy(participationRows, (row) => (row.sectors.length ? row.sectors : ['none'])),
-      active: countBy(activeRows, (row) => (row.sectors.length ? row.sectors : ['none'])),
-    },
   };
 
   // ---- progress in the period, per learner and topic
-  const [topics, pairs, activityProgress, skills, testAttempts, answersInRange, allTests, sessionsInRange, faceInRange] = await Promise.all([
+  const [topics, pairs, hoursRows, skills, testAttempts, answersInRange, allTests, sessionsInRange, faceInRange] = await Promise.all([
     q(`SELECT lm.id, lm.title, lm.phase FROM learning_modules lm
        WHERE ${T.sql} AND lm.approval_status = 'approved' ORDER BY lm.sort_order, lm.id`, T.params),
     q(`SELECT a.beneficiary_id, a.module_id, a.assignment_status, a.applied_at, a.assigned_at,
               b.full_name AS learner_name, s.full_name AS specialist_name, s.id AS specialist_id, cert.issued_at AS completed_at
        FROM elevate_module_assignments a
        JOIN learning_modules lm ON lm.id = a.module_id AND ${T.sql}
-       JOIN users b ON b.id = a.beneficiary_id AND ${L.sql}
+       JOIN users b ON b.id = a.beneficiary_id AND ${LEARNERS}
        LEFT JOIN users s ON s.id = a.specialist_id
        LEFT JOIN module_certificates cert ON cert.user_id = a.beneficiary_id AND cert.module_id = a.module_id
        WHERE a.assignment_status IN ('pending', 'assigned')
-       ORDER BY lm.sort_order, b.full_name`, [...T.params, ...L.params]),
-    q(`SELECT a.module_id, a.beneficiary_id, COUNT(act.id) AS total,
-              SUM(CASE WHEN (act.activity_type = 'multiple_choice' AND ans.is_correct = 1)
-                         OR (act.activity_type <> 'multiple_choice' AND ans.id IS NOT NULL) THEN 1 ELSE 0 END) AS done
-       FROM elevate_module_assignments a
-       JOIN module_activities act ON act.module_id = a.module_id AND act.specialist_id = a.specialist_id
-       LEFT JOIN module_activity_answers ans ON ans.activity_id = act.id AND ans.beneficiary_id = a.beneficiary_id
-       WHERE a.assignment_status = 'assigned'
-       GROUP BY a.module_id, a.beneficiary_id`, []),
+       ORDER BY lm.sort_order, b.full_name`, [...T.params]),
+    loadFaceToFace({}),
     q(`SELECT sa.user_id, ms.module_id, sa.attempt, sa.test_kind, sa.level, sa.band
        FROM elevate_skill_assessments sa
        JOIN module_skills ms ON ms.skill_id = sa.skill_id AND ms.is_primary = 1
        JOIN learning_modules lm ON lm.id = ms.module_id AND ${T.sql}
-       JOIN users b ON b.id = sa.user_id AND ${L.sql}
-       ORDER BY sa.user_id, ms.module_id, sa.attempt`, [...T.params, ...L.params]),
+       JOIN users b ON b.id = sa.user_id AND ${LEARNERS}
+       ORDER BY sa.user_id, ms.module_id, sa.attempt`, [...T.params]),
     // Module pre-test / post-test, with the learner's current specialist.
     q(`SELECT t.module_id, t.beneficiary_id, t.test_kind, t.score, t.total
        FROM module_test_attempts t
        JOIN elevate_module_assignments a ON a.beneficiary_id = t.beneficiary_id AND a.module_id = t.module_id
         AND a.specialist_id = t.specialist_id AND a.assignment_status = 'assigned'`, []),
-    // Module answers sent in the period, per learner and topic.
-    q(`SELECT act.module_id, ans.beneficiary_id, COUNT(*) AS n
-       FROM module_activity_answers ans
-       JOIN module_activities act ON act.id = ans.activity_id
-       JOIN learning_modules lm ON lm.id = act.module_id AND ${T.sql}
-       JOIN users b ON b.id = ans.beneficiary_id AND ${L.sql}
-       WHERE ${inRange('ans.submitted_at')}
-       GROUP BY act.module_id, ans.beneficiary_id`, [...T.params, ...L.params, ...R]),
+    // Module answers sent in the period, per learner and topic: every submission
+    // (tries again included), the same count as Participation's.
+    q(`SELECT l.module_id, l.user_id AS beneficiary_id, COUNT(*) AS n
+       FROM user_activity_log l
+       JOIN learning_modules lm ON lm.id = l.module_id AND ${T.sql}
+       JOIN users b ON b.id = l.user_id AND ${LEARNERS}
+       WHERE l.action = 'activity_answered' AND ${inRange('l.created_at')}
+       GROUP BY l.module_id, l.user_id`, [...T.params, ...R]),
     // Every topic pre-test / post-test (a post-test's pre-test may be older than the period).
     q(`SELECT t.module_id, t.beneficiary_id, t.test_kind, t.score, t.total, t.taken_at, b.full_name AS learner, lm.title AS topic
        FROM module_test_attempts t
        JOIN learning_modules lm ON lm.id = t.module_id AND ${T.sql}
-       JOIN users b ON b.id = t.beneficiary_id AND ${L.sql}
-       ORDER BY t.taken_at, t.id`, [...T.params, ...L.params]),
+       JOIN users b ON b.id = t.beneficiary_id AND ${LEARNERS}
+       ORDER BY t.taken_at, t.id`, [...T.params]),
     // Online sessions in the period, per learner and topic.
     q(`SELECT ls.module_id, ls.beneficiary_id, COUNT(*) AS n FROM learning_sessions ls
        JOIN learning_modules lm ON lm.id = ls.module_id AND ${T.sql}
-       JOIN users b ON b.id = ls.beneficiary_id AND ${L.sql}
-       WHERE ${inRange('ls.session_date')}
-       GROUP BY ls.module_id, ls.beneficiary_id`, [...T.params, ...L.params, ...R]),
+       JOIN users b ON b.id = ls.beneficiary_id AND ${LEARNERS}
+       WHERE ${inRange('ls.held_at')}
+       GROUP BY ls.module_id, ls.beneficiary_id`, [...T.params, ...R]),
     // Face-to-face sessions they came to in the period, per learner and topic.
     q(`SELECT f.module_id, f.beneficiary_id, COUNT(*) AS n FROM ${FACE_TO_FACE_SQL} f
        JOIN learning_modules lm ON lm.id = f.module_id AND ${T.sql}
-       JOIN users b ON b.id = f.beneficiary_id AND ${L.sql}
+       JOIN users b ON b.id = f.beneficiary_id AND ${LEARNERS}
        WHERE ${inRange('f.starts_at')}
-       GROUP BY f.module_id, f.beneficiary_id`, [...T.params, ...L.params, ...R]),
+       GROUP BY f.module_id, f.beneficiary_id`, [...T.params, ...R]),
   ]);
-  const activityByPair = new Map(activityProgress.map((row) => [`${row.module_id}:${row.beneficiary_id}`, { total: Number(row.total), done: Number(row.done) || 0 }]));
+  const faceToFaceByPair = new Map(hoursRows.map((item) => [`${item.moduleId}:${item.beneficiaryId}`, item]));
   const testByPair = new Map();
   testAttempts.forEach((row) => {
     const key = `${row.module_id}:${row.beneficiary_id}`;
@@ -463,7 +440,7 @@ async function getReport(req, res) {
   });
   const progressRows = pairs.filter((pair) => topicById.has(Number(pair.module_id))).map((pair) => {
     const key = `${pair.module_id}:${pair.beneficiary_id}`;
-    const activity = activityByPair.get(key) || { total: 0, done: 0 };
+    const hours = faceToFaceByPair.get(key);
     const skill = skillByPair.get(key) || { pre: null, post: null };
     const test = testByPair.get(key) || { pre: null, post: null };
     return {
@@ -474,8 +451,9 @@ async function getReport(req, res) {
       phase: topicById.get(Number(pair.module_id)).phase,
       specialist: pair.specialist_name,
       stage: pair.completed_at ? 'completed' : pair.assignment_status === 'pending' ? 'incoming' : 'ongoing',
-      activitiesDone: activity.done,
-      activitiesTotal: activity.total,
+      // Face-to-face hours so far, of the module's training hours (accepted topics).
+      faceToFaceHours: hours ? hours.hoursDone : null,
+      hoursNeeded: hours ? hours.hours : null,
       preBand: skill.pre?.band || null,
       preLevel: skill.pre?.level ?? null,
       postBand: skill.post?.band || null,
@@ -548,34 +526,34 @@ async function getReport(req, res) {
               issuer.full_name AS specialist, issuer.id AS specialist_id, a.assigned_at
        FROM module_certificates mc
        JOIN learning_modules lm ON lm.id = mc.module_id AND ${T.sql}
-       JOIN users b ON b.id = mc.user_id AND ${L.sql}
+       JOIN users b ON b.id = mc.user_id AND ${LEARNERS}
        LEFT JOIN users issuer ON issuer.id = mc.issued_by
        LEFT JOIN elevate_module_assignments a ON a.beneficiary_id = mc.user_id AND a.module_id = mc.module_id
        WHERE ${inRange('mc.issued_at')}
-       ORDER BY mc.issued_at DESC`, [...T.params, ...L.params, ...R]),
+       ORDER BY mc.issued_at DESC`, [...T.params, ...R]),
     q(`SELECT ls.module_id, COUNT(*) AS n FROM learning_sessions ls
        JOIN learning_modules lm ON lm.id = ls.module_id AND ${T.sql}
-       JOIN users b ON b.id = ls.beneficiary_id AND ${L.sql}
-       WHERE ${inRange('ls.session_date')} GROUP BY ls.module_id`, [...T.params, ...L.params, ...R]),
+       JOIN users b ON b.id = ls.beneficiary_id AND ${LEARNERS}
+       WHERE ${inRange('ls.held_at')} GROUP BY ls.module_id`, [...T.params, ...R]),
     q(`SELECT l.user_id AS id, s.full_name AS name, COUNT(*) AS n FROM user_activity_log l
        JOIN users s ON s.id = l.user_id
-       JOIN users b ON b.id = l.target_user_id AND ${L.sql}
+       JOIN users b ON b.id = l.target_user_id AND ${LEARNERS}
        JOIN learning_modules lm ON lm.id = l.module_id AND ${T.sql}
-       WHERE l.action = 'accepted' AND ${inRange('l.created_at')} GROUP BY l.user_id, s.full_name`, [...L.params, ...T.params, ...R]),
+       WHERE l.action = 'accepted' AND ${inRange('l.created_at')} GROUP BY l.user_id, s.full_name`, [...T.params, ...R]),
     q(`SELECT ls.specialist_id AS id, s.full_name AS name, COUNT(*) AS n FROM learning_sessions ls
        JOIN users s ON s.id = ls.specialist_id
        JOIN learning_modules lm ON lm.id = ls.module_id AND ${T.sql}
-       JOIN users b ON b.id = ls.beneficiary_id AND ${L.sql}
-       WHERE ${inRange('ls.session_date')} GROUP BY ls.specialist_id, s.full_name`, [...T.params, ...L.params, ...R]),
+       JOIN users b ON b.id = ls.beneficiary_id AND ${LEARNERS}
+       WHERE ${inRange('ls.held_at')} GROUP BY ls.specialist_id, s.full_name`, [...T.params, ...R]),
     q(`SELECT f.module_id, COUNT(DISTINCT f.session_id) AS n FROM ${FACE_TO_FACE_SQL} f
        JOIN learning_modules lm ON lm.id = f.module_id AND ${T.sql}
-       JOIN users b ON b.id = f.beneficiary_id AND ${L.sql}
-       WHERE ${inRange('f.starts_at')} GROUP BY f.module_id`, [...T.params, ...L.params, ...R]),
+       JOIN users b ON b.id = f.beneficiary_id AND ${LEARNERS}
+       WHERE ${inRange('f.starts_at')} GROUP BY f.module_id`, [...T.params, ...R]),
     q(`SELECT f.specialist_id AS id, s.full_name AS name, COUNT(DISTINCT f.session_id) AS n FROM ${FACE_TO_FACE_SQL} f
        JOIN users s ON s.id = f.specialist_id
        JOIN learning_modules lm ON lm.id = f.module_id AND ${T.sql}
-       JOIN users b ON b.id = f.beneficiary_id AND ${L.sql}
-       WHERE ${inRange('f.starts_at')} GROUP BY f.specialist_id, s.full_name`, [...T.params, ...L.params, ...R]),
+       JOIN users b ON b.id = f.beneficiary_id AND ${LEARNERS}
+       WHERE ${inRange('f.starts_at')} GROUP BY f.specialist_id, s.full_name`, [...T.params, ...R]),
   ]);
   const daysToComplete = (row) => (row.assigned_at ? Math.max(0, Math.round((new Date(row.issued_at) - new Date(row.assigned_at)) / DAY)) : null);
   const certificates = certificateRows.map((row) => ({
@@ -619,11 +597,8 @@ async function getReport(req, res) {
     .sort((a, b) => b.certificates - a.certificates || b.sessions - a.sessions || a.name.localeCompare(b.name));
 
   // ---- filter choices
-  const [phaseRows, cityRows] = await Promise.all([
-    q(`SELECT lm.id, lm.title, lm.phase FROM learning_modules lm
-       WHERE lm.is_elevate_program = 1 AND lm.approval_status = 'approved' AND ${offeredOrInUseSql('lm')} ORDER BY lm.sort_order, lm.id`, []),
-    q(`SELECT DISTINCT city FROM users WHERE user_type = 'beneficiary' AND city IS NOT NULL AND city <> '' ORDER BY city`, []),
-  ]);
+  const phaseRows = await q(`SELECT lm.id, lm.title, lm.phase FROM learning_modules lm
+     WHERE lm.is_elevate_program = 1 AND lm.approval_status = 'approved' AND ${offeredOrInUseSql('lm')} ORDER BY lm.sort_order, lm.id`, []);
 
   res.json({
     success: true,
@@ -633,7 +608,6 @@ async function getReport(req, res) {
       options: {
         phases: [...new Set(phaseRows.map((row) => row.phase))],
         topics: phaseRows.map((row) => ({ id: row.id, title: row.title, phase: row.phase })),
-        cities: cityRows.map((row) => row.city),
       },
       summary: {
         // Same definition as the table and the "who took part" breakdown.
@@ -643,7 +617,6 @@ async function getReport(req, res) {
         logins: total(loginsDaily),
         messages: total(messagesDaily),
         activitiesAnswered: total(answersDaily),
-        moduleAnswers: answersInRange.reduce((sum, row) => sum + Number(row.n), 0),
         applications: total(appliedDaily),
         accepted: total(acceptedDaily),
         certificates: total(certificatesDaily),

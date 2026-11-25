@@ -25,16 +25,6 @@
   progress {
     accent-color: #033962;
   }
-
-  /* Login and signup show no scrollbar (AuthShell adds this class). A very
-     short window can still scroll with the mouse wheel, touch or keyboard. */
-  html.auth-page {
-    scrollbar-width: none;
-  }
-
-  html.auth-page::-webkit-scrollbar {
-    display: none;
-  }
 }
 
 @layer components {
@@ -111,6 +101,18 @@
   }
   .fade-enter {
     animation: ie-fade-in 0.2s ease-out backwards;
+  }
+  /* The Log in / Sign up panel slides in from the right edge, and switching
+     between the two slides the new form in. */
+  @keyframes ie-drawer-in {
+    from { transform: translateX(100%); }
+    to { transform: none; }
+  }
+  .drawer-enter {
+    animation: ie-drawer-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
+  .slide-enter {
+    animation: ie-panel-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
   }
   /* The confetti on a finished topic falls into place once. */
   @keyframes ie-confetti-fall {

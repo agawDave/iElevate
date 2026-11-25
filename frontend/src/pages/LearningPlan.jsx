@@ -14,12 +14,6 @@ import { SkeletonLines } from '../components/ui/Skeleton';
 // everything the system uses to match learners with specialists. Personal and
 // demographic details stay on the Profile page.
 
-const GOAL_LABELS = {
-  job: 'Get hired for an office or BPO job',
-  freelance: 'Work from home as a freelancer or virtual assistant',
-  business: 'Start or grow my own online business',
-  undecided: 'Not sure yet',
-};
 const BAND_LABELS = { beginner: 'Beginner', developing: 'Developing', proficient: 'Proficient', strong: 'Strong' };
 const BAND_STYLES = {
   beginner: 'bg-amber-50 text-amber-800',
@@ -77,20 +71,15 @@ function SkillMap({ check }) {
   const results = check.results || [];
   const toLearn = [...results.filter((r) => r.outcome === 'active'), ...results.filter((r) => r.outcome === 'next_up')];
   const known = results.filter((r) => ['refresher', 'peer_helper'].includes(r.outcome));
-  const phases = check.profile?.phasesCompleted || [];
   return (
     <div>
       <dl className="mb-4 flex flex-wrap gap-2 text-sm">
         <div className="rounded-lg bg-stone-50 px-3 py-1.5"><dt className="inline text-slate-500">Used a computer: </dt><dd className="inline font-medium text-slate-800">{check.profile?.usedComputer ? 'Yes' : 'No'}</dd></div>
-        <div className="rounded-lg bg-stone-50 px-3 py-1.5"><dt className="inline text-slate-500">Phases finished: </dt><dd className="inline font-medium text-slate-800">{phases.length ? phases.map((phase) => `Phase ${phase}`).join(', ') : 'None yet'}</dd></div>
         <div className="rounded-lg bg-stone-50 px-3 py-1.5">
           <dt className="inline text-slate-500">{check.attempt > 1 ? `Post-test ${check.attempt - 1}` : 'Pre-test'}: </dt>
           <dd className="inline font-medium text-slate-800">{check.takenAt ? new Date(String(check.takenAt).replace(' ', 'T')).toLocaleDateString() : '—'}</dd>
         </div>
       </dl>
-      {check.profile?.notes && (
-        <p className="mb-4 rounded-lg border border-stone-200 px-3 py-2 text-sm text-slate-700"><span className="font-semibold text-slate-800">You told us: </span>{check.profile.notes}</p>
-      )}
       <div className="grid gap-5 lg:grid-cols-2">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800"><span className="h-2.5 w-2.5 rounded-full bg-accent-500" aria-hidden="true" />Topics to learn ({toLearn.length})</h3>
@@ -208,7 +197,7 @@ export default function LearningPlan() {
         eyebrow="ELEVATE profiling"
         title={isBeneficiary ? 'My Learning Plan' : 'My Teaching Plan'}
         subtitle={isBeneficiary
-          ? (check?.profile?.goalTrack ? `Your goal: ${GOAL_LABELS[check.profile.goalTrack]}. Your pre-assessment and preferred setup decide which topics you learn and who teaches each one.` : 'Your pre-assessment and preferred setup decide which topics you learn and which specialist teaches each one.')
+          ? (check?.profile?.goalLabel ? `Your goal: ${check.profile.goalLabel}. Your pre-assessment and preferred setup decide which topics you learn and who teaches each one.` : 'Your pre-assessment and preferred setup decide which topics you learn and which specialist teaches each one.')
           : 'Your topics, teaching details and preferred setup decide which beneficiaries are matched to you.'}
         actions={(
           <>
@@ -248,7 +237,7 @@ export default function LearningPlan() {
       ) : (
         <>
           <Section title="Topics you teach">
-            <TopicPicker relation="teaches" onSaved={() => setTeachingTopicsVersion((current) => current + 1)} />
+            <TopicPicker onSaved={() => setTeachingTopicsVersion((current) => current + 1)} />
           </Section>
           <Section
             title="Your teaching details"
@@ -259,7 +248,7 @@ export default function LearningPlan() {
           <CircumstancesPanel
             userType="specialist"
             title="Your preferred setup"
-            description="Beneficiaries are matched to you when their schedule, learning mode, and barangay align with yours."
+            description="Beneficiaries are matched to you when their schedule, learning mode, and barangay align with yours. Face-to-face sessions are booked inside your free times."
           />
         </>
       )}

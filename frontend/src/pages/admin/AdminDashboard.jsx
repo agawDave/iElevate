@@ -82,7 +82,7 @@ function Gains({ gains }) {
         </span>
       </div>
       <p className="mt-2 text-xs text-slate-500">
-        Average score before and after the activities, from {gains.topics} topic{gains.topics === 1 ? '' : 's'} finished by {gains.learners} learner{gains.learners === 1 ? '' : 's'}.
+        Average score before and after learning, from {gains.topics} topic{gains.topics === 1 ? '' : 's'} finished by {gains.learners} learner{gains.learners === 1 ? '' : 's'}.
       </p>
     </>
   );

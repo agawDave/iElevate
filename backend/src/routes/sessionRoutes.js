@@ -2,6 +2,7 @@ const express = require('express');
 const { requireAuth } = require('../middleware/authMiddleware');
 const {
   createModuleSession,
+  getBookingFreeTimes,
   listMyModuleSessions,
   updateModuleSessionStatus,
   listMyLearningSessions,
@@ -20,6 +21,7 @@ router.get('/open', requireAuth, listOpenSessions);
 router.post('/open', requireAuth, createOpenSession);
 router.post('/open/:sessionId/join', requireAuth, joinOpenSession);
 router.delete('/open/:sessionId/join', requireAuth, leaveOpenSession);
+router.get('/modules/:moduleId/free-times', requireAuth, getBookingFreeTimes);
 router.post('/modules/:moduleId', requireAuth, createModuleSession);
 router.patch('/modules/:sessionId/status', requireAuth, updateModuleSessionStatus);
 

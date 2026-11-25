@@ -4,7 +4,7 @@ const {
   recomputeAssignmentsForSpecialist,
 } = require('../services/elevateAssignmentService');
 const { PROFICIENCY_LEVELS, LEARNER_LEVELS, parseList } = require('../lib/elevateTeachingFit');
-const { offeredSql } = require('../lib/programPhases');
+const { offeredSql, loadPhases } = require('../lib/programPhases');
 
 const MAX_CERTIFICATIONS = 8;
 const MAX_CERTIFICATION_LENGTH = 100;
@@ -49,9 +49,11 @@ function parseSkillIdList(skillIds) {
 }
 
 async function listElevateTopics(req, res) {
-  const topics = await findElevateTopics();
+  const [topics, phases] = await Promise.all([findElevateTopics(), loadPhases()]);
   res.json({
     success: true,
+    // Every phase, including new ones without modules yet, for the phase dropdown.
+    phases,
     data: topics.map((topic) => ({
       skillId: topic.skill_id,
       moduleId: topic.module_id,

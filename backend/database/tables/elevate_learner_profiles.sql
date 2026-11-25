@@ -6,7 +6,8 @@
 
 CREATE TABLE `elevate_learner_profiles` (
   `user_id` bigint(20) unsigned NOT NULL,
-  `goal_track` enum('job','freelance','business','undecided') NOT NULL,
+  `goal_track` varchar(30) NOT NULL,
+  `goal_other` varchar(150) DEFAULT NULL COMMENT 'The goal the beneficiary typed under "Other"; asked about like "Not sure yet" (goal_track)',
   `used_computer` tinyint(1) NOT NULL,
   `phases_completed` varchar(40) DEFAULT NULL,
   `notes` text DEFAULT NULL,

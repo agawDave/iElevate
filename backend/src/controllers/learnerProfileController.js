@@ -35,10 +35,11 @@ async function getLearnerForSpecialist(req, res) {
             u.education, u.work_status, u.school_or_org, u.mobile_number, u.email,
             u.country, u.province, u.state_region, u.city, c.barangay,
             c.learning_modes, c.availability, c.device_access, c.internet_access,
-            p.goal_track, p.used_computer, p.notes, p.completed_at AS skill_check_at
+            COALESCE(p.goal_other, g.label) AS goal_label, p.used_computer, p.completed_at AS skill_check_at
      FROM users u
      LEFT JOIN user_learning_circumstances c ON c.user_id = u.id
      LEFT JOIN elevate_learner_profiles p ON p.user_id = u.id
+     LEFT JOIN program_goals g ON g.value = p.goal_track
      WHERE u.id = ? AND u.user_type = 'beneficiary' AND u.status = 'active'`,
     [beneficiaryId]
   );
@@ -79,9 +80,8 @@ async function getLearnerForSpecialist(req, res) {
       },
       contact: accepted ? { mobile: user.mobile_number || null, email: user.email } : null,
       learning: {
-        goalTrack: user.goal_track,
+        goalLabel: user.goal_label,
         usedComputer: user.used_computer === null || user.used_computer === undefined ? null : Boolean(user.used_computer),
-        notes: user.notes || '',
         skillCheckAt: user.skill_check_at,
         learningModes: circumstances.learningModes,
         availability: circumstances.availability,

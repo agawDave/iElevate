@@ -3,7 +3,7 @@ import AppLayout from '../../components/layout/AppLayout';
 import AdminTrainingDesign from './AdminTrainingDesign';
 import AdminModules from './AdminModules';
 
-// Admin → Modules: the Training design and Approval tabs (?tab=approval).
+// Admin → Modules: the Phases and Waiting Approval tabs (?tab=approval).
 // Both stay loaded, so switching tabs is instant and keeps each tab's search.
 export default function AdminModulesPage() {
   const [searchParams] = useSearchParams();

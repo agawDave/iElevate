@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 import { useAuth } from '../../context/AuthContext';
-import { useSocket } from '../../context/SocketContext';
+import useConversation from '../chat/useConversation';
 import CertificateUploadDialog from '../certificates/CertificateUploadDialog';
 import { openCertificate } from '../../lib/certificates';
 import { formatTime } from '../../lib/sessions';
@@ -16,7 +16,7 @@ const STATUS_STYLES = {
 };
 const BAND_LABELS = { beginner: 'Beginner', developing: 'Developing', proficient: 'Proficient', strong: 'Strong' };
 
-function Avatar({ name, src, size = 'h-8 w-8' }) {
+export function Avatar({ name, src, size = 'h-8 w-8' }) {
   return src ? (
     <img src={src} alt="" className={`${size} shrink-0 rounded-full object-cover`} />
   ) : (
@@ -28,21 +28,14 @@ function Avatar({ name, src, size = 'h-8 w-8' }) {
 
 // The private chat for one topic between a learner and their specialist,
 // shown in a side panel from the topic's card on the Modules page.
-export default function ModuleChatPanel({ conversation, module, isSpecialist, onOpenMaterials, onChanged, onClose, onViewProfile }) {
+export default function ModuleChatPanel({ conversation, module, isSpecialist, onOpenMaterials, onChanged, onClose, onViewProfile, progress }) {
   const confirm = useConfirm();
   const { user } = useAuth();
-  const { socket, connected } = useSocket();
-  const [messages, setMessages] = useState([]);
+  const { messages, error, setError, canSend, send, listRef } = useConversation(conversation.id, onChanged);
   const [draft, setDraft] = useState('');
-  const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [joinedId, setJoinedId] = useState(null);
   const [certificateDialog, setCertificateDialog] = useState(null); // 'issue' | 'replace'
   const [reopening, setReopening] = useState(false);
-  const [completionNotice, setCompletionNotice] = useState(null);
-  const listRef = useRef(null);
-  const changedRef = useRef(onChanged);
-  changedRef.current = onChanged;
 
   const conversationId = conversation.id;
   const otherName = conversation.otherUserName || (isSpecialist ? 'your learner' : 'your specialist');
@@ -51,90 +44,26 @@ export default function ModuleChatPanel({ conversation, module, isSpecialist, on
   const reasons = (module.matchReasons || []).filter((reason) => reason !== `Teaches ${module.title}`);
 
   useEffect(() => {
-    let active = true;
-    setMessages([]);
-    setError('');
     setNotice('');
     setDraft('');
-    axiosClient.get(`/messages/conversations/${conversationId}/messages`)
-      .then((response) => { if (active) setMessages(response.data.data); })
-      .catch((requestError) => { if (active) setError(requestError.response?.data?.message || 'Unable to load this conversation.'); });
-    axiosClient.patch(`/messages/conversations/${conversationId}/read`)
-      .then(() => changedRef.current?.())
-      .catch(() => {});
-    return () => { active = false; };
   }, [conversationId]);
 
-  // Join the live room (again after a reconnect).
-  useEffect(() => {
-    setJoinedId(null);
-    if (!socket || !connected) return undefined;
-    let active = true;
-    socket.emit('conversation:join', conversationId, (response) => {
-      if (!active) return;
-      if (response?.success) setJoinedId(String(conversationId));
-      else setError(response?.message || 'Unable to join this conversation.');
-    });
-    return () => { active = false; };
-  }, [socket, connected, conversationId]);
-
-  useEffect(() => {
-    if (!socket) return undefined;
-    const onMessage = (message) => {
-      if (String(message.conversationId) !== String(conversationId)) return;
-      setMessages((previous) => (previous.some((item) => String(item.id) === String(message.id)) ? previous : [...previous, message]));
-      if (String(message.senderId) !== String(user?.id)) {
-        axiosClient.patch(`/messages/conversations/${conversationId}/read`).catch(() => {});
-      }
-      changedRef.current?.();
-    };
-    const onError = (socketError) => setError(socketError.message || 'Unable to send message.');
-    socket.on('message:new', onMessage);
-    socket.on('message:error', onError);
-    return () => {
-      socket.off('message:new', onMessage);
-      socket.off('message:error', onError);
-    };
-  }, [socket, conversationId, user?.id]);
-
-  useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages.length]);
-
   // Before issuing a certificate: the learner's test scores, and a reminder
-  // if the post-test or some activities aren't done yet.
-  useEffect(() => {
-    setCompletionNotice(null);
-    if (certificateDialog !== 'issue' || !isSpecialist) return undefined;
-    let active = true;
-    axiosClient.get('/elevate/activities/answers', { params: { moduleId: module.id, beneficiaryId: conversation.beneficiaryId } })
-      .then((response) => {
-        if (!active) return;
-        const { tests, activities } = response.data.data;
-        const done = activities.filter((activity) => activity.done).length;
-        const missing = [];
-        if (tests.questionCount && !tests.post) missing.push(tests.pre ? "hasn't taken the post-test yet" : "hasn't taken the pre-test or the post-test");
-        if (done < activities.length) missing.push(`has done ${done} of ${activities.length} activities`);
-        const scores = tests.pre && tests.post ? `Pre-test ${tests.pre.score}/${tests.pre.total} → Post-test ${tests.post.score}/${tests.post.total}.` : '';
-        if (missing.length) {
-          setCompletionNotice({ warn: true, text: `${scores ? `${scores} ` : ''}${firstName} ${missing.join(' and ')}. You can still issue the certificate.` });
-        } else if (scores) {
-          setCompletionNotice({ warn: false, text: `${scores} All activities done.` });
-        }
-      })
-      .catch(() => {});
-    return () => { active = false; };
-  }, [certificateDialog, isSpecialist, module.id, conversation.beneficiaryId, firstName]);
-
-  const canSend = Boolean(socket && connected && joinedId === String(conversationId));
+  // if the post-test isn't done yet. progress: from the Modules page (specialists).
+  let completionNotice = null;
+  if (certificateDialog === 'issue' && progress) {
+    const { hasTest, preTest, postTest } = progress;
+    const scores = preTest && postTest ? `Pre-test ${preTest.score}/${preTest.total} → Post-test ${postTest.score}/${postTest.total}.` : '';
+    if (hasTest && !postTest) {
+      completionNotice = { warn: true, text: `${firstName} ${preTest ? "hasn't taken the post-test yet" : "hasn't taken the pre-test or the post-test"}. You can still issue the certificate.` };
+    } else if (scores) {
+      completionNotice = { warn: false, text: scores };
+    }
+  }
 
   function sendMessage(event) {
     event.preventDefault();
-    const body = draft.trim();
-    if (!body || !canSend) return;
-    setError('');
-    socket.emit('message:send', { conversationId, body });
-    setDraft('');
+    if (send(draft.trim())) setDraft('');
   }
 
   async function submitCertificate(file) {
@@ -147,7 +76,7 @@ export default function ModuleChatPanel({ conversation, module, isSpecialist, on
     setCertificateDialog(null);
     setError('');
     setNotice(response.data.message);
-    changedRef.current?.();
+    onChanged?.();
   }
 
   async function reopenTopic() {
@@ -158,7 +87,7 @@ export default function ModuleChatPanel({ conversation, module, isSpecialist, on
     try {
       const response = await axiosClient.delete(`/modules/${module.id}/learners/${conversation.beneficiaryId}/complete`);
       setNotice(response.data.message);
-      changedRef.current?.();
+      onChanged?.();
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Unable to reopen this topic.');
     } finally {

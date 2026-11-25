@@ -7,32 +7,19 @@ import { leftoverText, rangeOf, readPastedQuestions } from '../../lib/pasteQuest
 // Every question shows in the preview as it's read; the ones with a problem
 // are flagged and stay in the box when the rest are added.
 
-const TARGETS = {
-  test: {
-    label: 'Pre/post-test', one: 'question', many: 'questions', url: '/elevate/tests/bulk',
-    after: 'They go after your other test questions.',
-    full: (room) => `Your test has room for ${room} more question${room === 1 ? '' : 's'} (30 at most). Remove some from the box.`,
-  },
-  activities: {
-    label: 'Activities (multiple choice)', one: 'activity', many: 'activities', url: '/elevate/activities/bulk',
-    after: 'They go after your other activities, as multiple choice.',
-    full: (room) => `This topic has room for ${room} more activit${room === 1 ? 'y' : 'ies'} (50 at most). Remove some from the box.`,
-  },
-};
 const PLACEHOLDER = '1. Which function adds up a range of numbers?\na. AVERAGE\n*b. SUM\nc. COUNT\n\n2. What symbol does every formula start with?\na. +\nb. =\nc. #\nAnswer: b';
 const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const letter = (index) => String.fromCharCode(65 + index);
 
-export default function PasteQuestions({ moduleId, target, onTargetChange, text, onTextChange, savedPrompts, room, takenBy = 0, backLabel, onBack, onAdded }) {
+// Adds them to the pre/post-test. savedPrompts: the questions it already has; room: how many more fit.
+export default function PasteQuestions({ moduleId, text, onTextChange, savedPrompts, room, takenBy = 0, onBack, onAdded }) {
   const box = useRef(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const kind = TARGETS[target];
-  const saved = savedPrompts[target];
-  const questions = useMemo(() => readPastedQuestions(text, saved), [text, saved]);
+  const questions = useMemo(() => readPastedQuestions(text, savedPrompts), [text, savedPrompts]);
   const ready = questions.filter((question) => !question.problem);
   const needFix = questions.length - ready.length;
-  const tooMany = ready.length > room[target];
+  const tooMany = ready.length > room;
 
   function showInBox(question) {
     const element = box.current;
@@ -50,13 +37,13 @@ export default function PasteQuestions({ moduleId, target, onTargetChange, text,
     setSaving(true);
     setError('');
     try {
-      await axiosClient.post(kind.url, {
+      await axiosClient.post('/elevate/tests/bulk', {
         moduleId,
         questions: ready.map(({ prompt, options, correctOption }) => ({ prompt, options, correctOption })),
       });
       const left = questions.filter((question) => question.problem);
       onTextChange(leftoverText(text, left));
-      await onAdded({ target, added: ready.length, left: left.length });
+      await onAdded({ added: ready.length, left: left.length });
     } catch (requestError) {
       setError(requestError.response?.data?.message || 'Could not add the questions.');
       setSaving(false);
@@ -64,37 +51,19 @@ export default function PasteQuestions({ moduleId, target, onTargetChange, text,
   }
 
   let note = '';
-  if (tooMany) note = kind.full(room[target]);
+  if (tooMany) note = `Your test has room for ${room} more question${room === 1 ? '' : 's'} (30 at most). Remove some from the box.`;
   else if (needFix) note = needFix === 1 ? 'The one that needs a fix stays in the box, so you can fix it after.' : `The ${needFix} that need a fix stay in the box, so you can fix them after.`;
-  else if (ready.length) note = kind.after;
+  else if (ready.length) note = 'They go after your other test questions.';
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-3 text-sm text-slate-500 hover:text-brand-600">← {backLabel}</button>
+      <button type="button" onClick={onBack} className="mb-3 text-sm text-slate-500 hover:text-brand-600">← Back to questions</button>
       <h3 className="text-lg font-semibold text-slate-900">Paste questions</h3>
       <p className="mb-4 mt-1 text-sm text-slate-600">
         Copy your quiz from Word, Google Docs or a text file and paste it below. iELEVATE reads it and shows each question here first. Nothing is added until you click Add.
       </p>
 
-      <div className="mb-4">
-        <p id="paste-target" className="mb-1.5 text-sm font-medium text-slate-700">Add them to</p>
-        <div role="radiogroup" aria-labelledby="paste-target" className="inline-flex flex-wrap overflow-hidden rounded-lg border border-stone-300 bg-white">
-          {Object.entries(TARGETS).map(([value, item], index) => (
-            <button
-              key={value}
-              type="button"
-              role="radio"
-              aria-checked={target === value}
-              onClick={() => onTargetChange(value)}
-              className={`px-3 py-1.5 text-sm font-medium ${index ? 'border-l border-stone-300' : ''} ${target === value ? 'bg-brand-600 text-white' : 'text-slate-700 hover:bg-stone-50'}`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {target === 'test' && takenBy > 0 && (
+      {takenBy > 0 && (
         <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
           {takenBy} learner{takenBy === 1 ? ' has' : 's have'} taken the pre-test. Their scores stay as they are, but if you add questions now, their post-test won&apos;t be the same test.
         </p>

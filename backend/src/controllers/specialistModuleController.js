@@ -44,11 +44,10 @@ async function contentCounts(topicId, specialistId) {
   const [[row]] = await pool.query(
     `SELECT
        (SELECT COUNT(*) FROM module_resources WHERE module_id = ? AND uploaded_by = ?) AS materials,
-       (SELECT COUNT(*) FROM module_activities WHERE module_id = ? AND specialist_id = ?) AS activities,
        (SELECT COUNT(*) FROM module_test_questions WHERE module_id = ? AND specialist_id = ?) AS test_questions`,
-    [topicId, specialistId, topicId, specialistId, topicId, specialistId]
+    [topicId, specialistId, topicId, specialistId]
   );
-  return { materials: Number(row.materials), activities: Number(row.activities), testQuestions: Number(row.test_questions) };
+  return { materials: Number(row.materials), testQuestions: Number(row.test_questions) };
 }
 
 function moduleDto(row) {
@@ -82,7 +81,7 @@ function missingForSubmit(module, counts) {
   if (!module?.title?.trim()) missing.push('a title');
   if ((module?.overview || '').trim().length < LIMITS.minOverview) missing.push('an overview of a sentence or more');
   if (!counts.materials) missing.push('at least one material');
-  if (!counts.activities) missing.push('at least one activity');
+  if (!counts.testQuestions) missing.push('the pre/post-test questions');
   return missing;
 }
 
@@ -153,7 +152,7 @@ async function saveMyModule(req, res) {
   const module = await findModule(topicId, req.user.id);
   res.json({
     success: true,
-    message: existing ? 'Saved.' : 'Module created. Add your materials and activities, then submit it for approval.',
+    message: existing ? 'Saved.' : 'Module created. Add your materials and the pre/post-test, then submit it for approval.',
     data: moduleDto(module),
   });
 }
@@ -182,7 +181,7 @@ async function submitMyModule(req, res) {
   await logActivity({ userId: req.user.id, action: 'module_submitted', moduleId: topicId, details: module.title });
   const [admins] = await pool.query("SELECT id FROM users WHERE role IN ('admin', 'moderator') AND status = 'active'");
   admins.forEach((admin) => notify(req.app, admin.id, { type: 'module_submitted', moduleId: topicId }));
-  res.json({ success: true, message: 'Sent to the admin for approval. You can keep adding activities while you wait.', data: moduleDto(await findModule(topicId, req.user.id)) });
+  res.json({ success: true, message: 'Sent to the admin for approval. You can keep adding materials while you wait.', data: moduleDto(await findModule(topicId, req.user.id)) });
 }
 
 // -------------------------------------------------------------------- admin
@@ -220,7 +219,6 @@ async function listModulesForReview(req, res) {
             lm.title AS topic_title, lm.phase, lm.slug,
             u.id AS specialist_id, u.full_name AS specialist_name, u.avatar_url AS specialist_avatar,
             (SELECT COUNT(*) FROM module_resources r WHERE r.module_id = sm.topic_id AND r.uploaded_by = sm.specialist_id) AS materials,
-            (SELECT COUNT(*) FROM module_activities a WHERE a.module_id = sm.topic_id AND a.specialist_id = sm.specialist_id) AS activities,
             (SELECT COUNT(*) FROM module_test_questions q WHERE q.module_id = sm.topic_id AND q.specialist_id = sm.specialist_id) AS test_questions
      ${from}
      WHERE ${whereSql}
@@ -250,15 +248,14 @@ async function listModulesForReview(req, res) {
       phase: row.phase,
       slug: row.slug,
       specialist: { id: row.specialist_id, name: row.specialist_name, avatar: row.specialist_avatar || null },
-      counts: { materials: Number(row.materials), activities: Number(row.activities), testQuestions: Number(row.test_questions) },
+      counts: { materials: Number(row.materials), testQuestions: Number(row.test_questions) },
     })),
     pagination: { page, pageSize, total: Number(total), totalPages: Math.max(1, Math.ceil(Number(total) / pageSize)) },
     counts: Object.fromEntries(Object.entries(counts).map(([key, value]) => [key, Number(value) || 0])),
   });
 }
 
-// One module with everything the admin reviews: overview, materials,
-// activities and the test.
+// One module with everything the admin reviews: overview, materials and the test.
 async function getModuleForReview(req, res) {
   const [[row]] = await pool.query(
     `SELECT sm.*, lm.title AS topic_title, lm.phase, lm.slug, lm.hours AS topic_hours,
@@ -272,15 +269,10 @@ async function getModuleForReview(req, res) {
     [req.params.moduleId]
   );
   if (!row) return res.status(404).json({ success: false, message: 'Module not found.' });
-  const [[materials], [activities], [[test]]] = await Promise.all([
+  const [[materials], [[test]]] = await Promise.all([
     pool.query(
       `SELECT id, resource_type, title, original_filename, external_url FROM module_resources
        WHERE module_id = ? AND uploaded_by = ? ORDER BY sort_order, id`,
-      [row.topic_id, row.specialist_id]
-    ),
-    pool.query(
-      `SELECT id, activity_type, prompt FROM module_activities
-       WHERE module_id = ? AND specialist_id = ? ORDER BY sort_order, id`,
       [row.topic_id, row.specialist_id]
     ),
     pool.query('SELECT COUNT(*) AS n FROM module_test_questions WHERE module_id = ? AND specialist_id = ?', [row.topic_id, row.specialist_id]),
@@ -296,7 +288,6 @@ async function getModuleForReview(req, res) {
       reviewerName: row.reviewer_name || null,
       specialist: { id: row.specialist_id, name: row.specialist_name, avatar: row.specialist_avatar || null, email: row.specialist_email },
       materials: materials.map((item) => ({ id: item.id, type: item.resource_type, title: item.title, fileName: item.original_filename, url: item.external_url })),
-      activities: activities.map((item) => ({ id: item.id, type: item.activity_type, prompt: item.prompt })),
       testQuestions: Number(test.n),
     },
   });

@@ -6,8 +6,8 @@ const {
   validateSubmission,
   scoreSubmission,
 } = require('../lib/elevateSkillCheck');
-// The current year's modules, with their tasks, goals and prerequisites.
-const { loadProgramTopics } = require('../lib/programPhases');
+// The offered modules (tasks, goals, prerequisites) and the admin's main goals.
+const { loadProgramTopics, loadGoals } = require('../lib/programPhases');
 
 async function requireBeneficiary(req, res) {
   const [users] = await pool.query("SELECT user_type FROM users WHERE id = ? AND status = 'active'", [req.user.id]);
@@ -18,23 +18,29 @@ async function requireBeneficiary(req, res) {
   return true;
 }
 
-function parseJsonList(value) {
-  try {
-    const parsed = JSON.parse(value || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+// The offered modules minus the ones this beneficiary finished (has a
+// certificate for): a retake doesn't ask about those again.
+async function topicsToAsk(userId) {
+  const [topics, [finished]] = await Promise.all([
+    loadProgramTopics(),
+    pool.query('SELECT module_id FROM module_certificates WHERE user_id = ?', [userId]),
+  ]);
+  const finishedIds = new Set(finished.map((row) => Number(row.module_id)));
+  return topics.filter((topic) => !finishedIds.has(topic.moduleId));
 }
 
 async function getQuestionnaire(req, res) {
-  res.json({ success: true, data: publicQuestionnaire(await loadProgramTopics()) });
+  const [topics, goals] = await Promise.all([topicsToAsk(req.user.id), loadGoals()]);
+  res.json({ success: true, data: publicQuestionnaire(topics, goals) });
 }
 
 // The learner's latest attempt: Part A answers plus one result per topic.
 async function getMySkillCheck(req, res) {
   if (!(await requireBeneficiary(req, res))) return;
-  const [profiles] = await pool.query('SELECT * FROM elevate_learner_profiles WHERE user_id = ?', [req.user.id]);
+  const [profiles] = await pool.query(
+    'SELECT p.*, COALESCE(p.goal_other, g.label) AS goal_label FROM elevate_learner_profiles p LEFT JOIN program_goals g ON g.value = p.goal_track WHERE p.user_id = ?',
+    [req.user.id]
+  );
   const [rows] = await pool.query(
     `SELECT a.*, s.slug, lm.title, lm.phase
      FROM elevate_skill_assessments a
@@ -52,9 +58,9 @@ async function getMySkillCheck(req, res) {
       completed: Boolean(profile && rows.length),
       profile: profile ? {
         goalTrack: profile.goal_track,
+        goalOther: profile.goal_other,
+        goalLabel: profile.goal_label,
         usedComputer: Boolean(profile.used_computer),
-        phasesCompleted: parseJsonList(profile.phases_completed),
-        notes: profile.notes || '',
         sex: profile.sex,
         age: profile.age,
         workStatus: profile.work_status,
@@ -82,10 +88,10 @@ async function getMySkillCheck(req, res) {
 
 async function submitSkillCheck(req, res) {
   if (!(await requireBeneficiary(req, res))) return;
-  const topics = await loadProgramTopics();
-  const { value, error } = validateSubmission(req.body, topics);
+  const [topics, goals] = await Promise.all([topicsToAsk(req.user.id), loadGoals()]);
+  const { value, error } = validateSubmission(req.body, topics, goals);
   if (error) return res.status(400).json({ success: false, message: error });
-  const results = scoreSubmission(value, topics);
+  const results = scoreSubmission(value, topics, goals);
   const { profile } = value;
 
   const connection = await pool.getConnection();
@@ -95,11 +101,10 @@ async function submitSkillCheck(req, res) {
     // (users table); the skill check only records what it's used for.
     await connection.query(
       `INSERT INTO elevate_learner_profiles
-         (user_id, goal_track, used_computer, phases_completed, notes, completed_at)
-       VALUES (?, ?, ?, ?, ?, NOW())
-       ON DUPLICATE KEY UPDATE goal_track = VALUES(goal_track), used_computer = VALUES(used_computer),
-         phases_completed = VALUES(phases_completed), notes = VALUES(notes), completed_at = NOW()`,
-      [req.user.id, profile.goalTrack, profile.usedComputer ? 1 : 0, JSON.stringify(profile.phasesCompleted), profile.notes]
+         (user_id, goal_track, goal_other, used_computer, completed_at)
+       VALUES (?, ?, ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE goal_track = VALUES(goal_track), goal_other = VALUES(goal_other), used_computer = VALUES(used_computer), completed_at = NOW()`,
+      [req.user.id, profile.goalTrack, profile.goalOther, profile.usedComputer ? 1 : 0]
     );
     const [[{ lastAttempt }]] = await connection.query(
       'SELECT COALESCE(MAX(attempt), 0) AS lastAttempt FROM elevate_skill_assessments WHERE user_id = ? FOR UPDATE',
@@ -119,9 +124,10 @@ async function submitSkillCheck(req, res) {
     }
 
     // The skill check decides the learner's topics: active ones are matched
-    // now, next-up ones wait on the Modules page.
+    // now, next-up ones wait on the Modules page. Finished ones stay (they
+    // weren't asked), so they keep their certificate's place on Completed.
     await connection.query(
-      "DELETE FROM user_skills WHERE user_id = ? AND relation_type = 'wants_to_learn'",
+      "DELETE FROM user_skills WHERE user_id = ? AND relation_type = 'wants_to_learn' AND NOT (learning_status <=> 'completed')",
       [req.user.id]
     );
     for (const result of results.filter((item) => ['active', 'next_up'].includes(item.outcome))) {

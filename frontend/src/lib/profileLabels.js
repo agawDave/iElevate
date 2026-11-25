@@ -20,13 +20,6 @@ export const EDUCATION_LABELS = {
   postgraduate: 'Postgraduate',
 };
 
-export const GOAL_LABELS = {
-  job: 'Get hired (office / BPO work)',
-  freelance: 'Freelance / virtual assistant',
-  business: 'Start an online business',
-  undecided: 'Not sure yet',
-};
-
 export const BAND_LABELS = { beginner: 'Beginner', developing: 'Developing', proficient: 'Proficient', strong: 'Strong' };
 
 export const BAND_STYLES = {

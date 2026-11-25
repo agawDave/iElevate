@@ -8,7 +8,7 @@ import EmptyState from '../ui/EmptyState';
 import { TopicTile } from '../ui/TopicFace';
 
 // The beneficiary's dashboard: a navy banner, their numbers, their topics with
-// progress, upcoming sessions, and the latest replies from specialists.
+// their face-to-face hours, and upcoming sessions.
 
 const TILES = [
   { key: 'learning', label: 'Topics in progress', icon: 'progress', style: 'bg-brand-50 text-brand-600', to: '/modules?tab=ongoing' },
@@ -26,7 +26,7 @@ const STAGE_ORDER = { learning: 0, applied: 1, completed: 2 };
 
 function TopicRow({ topic }) {
   const stage = STAGES[topic.stage];
-  const { done, total } = topic.activities;
+  const hours = topic.faceToFace;
   const testLine = topic.test && (topic.test.pre
     ? `Pre-test ${topic.test.pre.score}/${topic.test.pre.total} → Post-test ${topic.test.post ? `${topic.test.post.score}/${topic.test.post.total}` : '—'}`
     : topic.test.preOpen ? 'Pre-test waiting' : null);
@@ -44,31 +44,17 @@ function TopicRow({ topic }) {
         </div>
         {topic.stage === 'learning' && (
           <div className="mt-2 flex items-center gap-3">
-            {total > 0 ? (
+            {hours?.hours > 0 && !hours.onlineOnly ? (
               <>
-                <ProgressBar done={done} total={total} label={`${topic.title} activities done`} />
-                <span className="shrink-0 text-xs tabular-nums text-slate-600">{done} of {total} activities</span>
+                <ProgressBar done={Math.min(hours.hoursDone, hours.hours)} total={hours.hours} label={`${topic.title} face-to-face hours`} />
+                <span className="shrink-0 text-xs tabular-nums text-slate-600">{hours.hoursDone} of {hours.hours} hours</span>
               </>
-            ) : <span className="flex-1 text-xs text-slate-500">No activities yet</span>}
+            ) : <span className="flex-1 text-xs text-slate-500">Online</span>}
             <Link to={to} className="shrink-0 rounded-lg bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100">Open</Link>
           </div>
         )}
         {testLine && <p className="mt-1 text-xs text-slate-500">{testLine}</p>}
       </div>
-    </li>
-  );
-}
-
-function FeedbackRow({ item }) {
-  return (
-    <li className="py-2.5">
-      <Link to={`/modules/${item.moduleId}`} className="group block">
-        <p className="line-clamp-2 text-sm italic text-slate-800 group-hover:text-brand-700">&ldquo;{item.feedback || 'Seen ✓'}&rdquo;</p>
-        <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          <span>{item.specialist} · {item.topic}</span>
-          {item.rubricTotal !== null && <span className="rounded-full bg-accent-50 px-2 py-0.5 font-semibold text-accent-600">Rubric {item.rubricTotal}/12</span>}
-        </p>
-      </Link>
     </li>
   );
 }
@@ -112,15 +98,10 @@ export default function LearnerDashboard({ greeting, firstName }) {
                 {data.sessions.length
                   ? <ul className="divide-y divide-stone-100">{data.sessions.map((session) => <SessionRow key={session.id} session={session} person={session.specialist} />)}</ul>
                   : data.summary.onlineOnly
-                    ? <EmptyState icon="calendar" compact title="You learn online" action={{ to: '/sessions', label: 'See your online sessions' }}>You live outside the Philippines, so each day you work on a topic counts as an online session.</EmptyState>
+                    ? <EmptyState icon="calendar" compact title="You learn online" action={{ to: '/sessions', label: 'See your online sessions' }}>You live outside the Philippines, so each test you take counts as an online session.</EmptyState>
                     : data.summary.learning > 0
                     ? <EmptyState icon="calendar" compact title="No sessions yet" action={{ to: '/sessions', label: 'Book a session' }}>Meet your specialist face to face, or join an open session on a topic you need.</EmptyState>
                     : <EmptyState icon="calendar" compact title="No sessions yet">Once a specialist accepts you, you can book sessions with them.</EmptyState>}
-              </Card>
-              <Card plain title="Latest feedback">
-                {data.feedback.length
-                  ? <ul className="divide-y divide-stone-100">{data.feedback.map((item) => <FeedbackRow key={item.answerId} item={item} />)}</ul>
-                  : <EmptyState icon="chat" compact title="No feedback yet">Your specialist&apos;s replies to your answers will show here.</EmptyState>}
               </Card>
             </SideColumn>
           </div>

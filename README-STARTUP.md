@@ -110,10 +110,12 @@ ELEVATE reference data). The setup file is all of them together, so import only 
   admin to approve.
 - **Admin:** sign up, then run `UPDATE users SET role = 'admin' WHERE email = '...';` in
   phpMyAdmin.
-- **Training design:** the admin manages the ELEVATE phases on **Admin → Modules** (the Training design tab; specialists' modules are approved on the Approval tab):
+- **Training design:** the admin manages the ELEVATE phases on **Admin → Modules** (the Phases tab; specialists' modules are approved on the Waiting Approval tab):
   add a phase (with the year it was created), add or edit its modules, and write the task each
   module asks in the pre-assessment. Every visible module is offered; specialists pick modules
-  and make their own module for each. Hide a module to retire it.
+  and make their own module for each. Hide a module to retire it. **Main goals** (at the top
+  of the page) holds the answers to the pre-assessment's "What is your main goal?" question;
+  each module ticks the goals that need it.
 - **Changing the database** (a new table or column): make the change in your local
   `ielevate_db`, then run
   `powershell -ExecutionPolicy Bypass -File backend\database\export_setup_sql.ps1`

@@ -11,7 +11,7 @@ CREATE TABLE `learning_modules` (
   `title` varchar(190) NOT NULL,
   `description` varchar(500) NOT NULL,
   `task` varchar(200) DEFAULT NULL,
-  `goal_tracks` varchar(100) DEFAULT NULL,
+  `goal_tracks` varchar(500) DEFAULT NULL,
   `uses_computer` tinyint(1) NOT NULL DEFAULT 0,
   `recommend_as_foundation` tinyint(1) NOT NULL DEFAULT 0,
   `learner_note` varchar(255) DEFAULT NULL,

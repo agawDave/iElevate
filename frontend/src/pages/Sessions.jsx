@@ -6,13 +6,15 @@ import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { DURATIONS, SESSION_STATUS, formatSessionRange, isLink, toLocalInputValue } from '../lib/sessions';
+import { describeFreeTimes, freeStartTimes } from '../lib/circumstances';
 import { SkeletonBlock, SkeletonLines } from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
 
 // Two kinds of sessions:
 //   - face-to-face, booked here: one-on-one (one asks, the other accepts), or
 //     open (a specialist posts it, beneficiaries who need the topic join);
-//   - online, added automatically each day a beneficiary works on a module.
+//   - online, added automatically each time a beneficiary takes a pre-test or
+//     post-test (past rows may also be an activity answer).
 
 // What this viewer can do with a session (the server decides).
 function sessionPermissions(session) {
@@ -190,20 +192,11 @@ function OpenSessionRow({ session, onJoin, joining }) {
   );
 }
 
-// What the beneficiary did that day: "2 answers · Pre-test".
-function onlineWork(session) {
-  return [
-    session.answers > 0 && plural(session.answers, 'answer'),
-    session.preTest && 'Pre-test',
-    session.postTest && 'Post-test',
-  ].filter(Boolean).join(' · ');
-}
+const ONLINE_KINDS = { pre_test: 'Pre-test', activity: 'Activity', post_test: 'Post-test' };
 
-// A day a beneficiary worked on a module online, added automatically.
+// One online session: a test taken (or, before, an activity answered), added automatically.
 function OnlineSessionRow({ session }) {
-  const day = new Date(`${session.date}T00:00:00`);
-  const from = timeOf(session.startedAt);
-  const to = timeOf(session.endedAt);
+  const day = new Date(session.heldAt);
   return (
     <li className="flex items-center gap-4 px-4 py-3">
       <span className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg bg-stone-100 text-slate-700">
@@ -215,18 +208,62 @@ function OnlineSessionRow({ session }) {
         <p className="text-sm text-slate-500">{session.isSpecialist ? session.otherUserName : `with ${session.otherUserName}`}</p>
       </div>
       <div className="text-right text-sm">
-        <p className="text-slate-700">{from === to ? from : `${from} – ${to}`}</p>
-        <p className="text-xs text-slate-500">{onlineWork(session)}</p>
+        <p className="text-slate-700">{ONLINE_KINDS[session.kind]}</p>
+        <p className="text-xs text-slate-500">{timeOf(session.heldAt)}</p>
       </div>
     </li>
   );
+}
+
+// Face-to-face sessions are held in the specialist's free times (My Teaching Plan).
+function FreeTimesNote({ who, slots }) {
+  if (!slots) return <SkeletonBlock className="mb-4 h-4 w-72" />;
+  return (
+    <p className="mb-4 text-sm text-slate-700">
+      {slots.length
+        ? <><span className="font-semibold">{who} free:</span> {describeFreeTimes(slots)}</>
+        : <span className="text-amber-800">{who === 'You are' ? 'Set your free times in My Teaching Plan first.' : 'They haven’t set their free times yet.'}</span>}
+    </p>
+  );
+}
+
+// A date, then a start time inside the free times that day.
+function FreeTimeFields({ slots, date, time, minutes, onDate, onTime }) {
+  const starts = freeStartTimes(slots || [], date, minutes);
+  const blocks = [...new Set(starts.map((start) => start.block))];
+  return (
+    <>
+      <label className="text-sm text-slate-600">
+        Date
+        <input required type="date" min={toLocalInputValue(new Date()).slice(0, 10)} value={date} onChange={(event) => onDate(event.target.value)} className={inputClass} />
+      </label>
+      <label className="text-sm text-slate-600">
+        Start time
+        <select required value={starts.some((start) => start.value === time) ? time : ''} onChange={(event) => onTime(event.target.value)} disabled={!starts.length} className={inputClass}>
+          <option value="">{!date ? 'Choose a date first' : starts.length ? 'Choose a time' : 'No free time this day'}</option>
+          {blocks.map((block) => (
+            <optgroup key={block.value} label={`${block.label} (${block.hint})`}>
+              {starts.filter((start) => start.block === block).map((start) => <option key={start.value} value={start.value}>{start.label}</option>)}
+            </optgroup>
+          ))}
+        </select>
+      </label>
+    </>
+  );
+}
+
+// The chosen start as a Date, or null when it isn't inside the free times.
+function freeStart(slots, date, time, minutes) {
+  return freeStartTimes(slots || [], date, minutes).some((start) => start.value === time) ? new Date(`${date}T${time}:00+08:00`) : null;
 }
 
 // "Book a session" from a module chat: /sessions?moduleId=..[&learner=..]
 // A one-on-one face-to-face session.
 function BookingForm({ moduleId, learnerId, onBooked, onCancel }) {
   const [details, setDetails] = useState(null);
-  const [start, setStart] = useState('');
+  const [free, setFree] = useState(null);
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
   const [minutes, setMinutes] = useState(60);
   const [place, setPlace] = useState('');
   const [error, setError] = useState('');
@@ -241,13 +278,21 @@ function BookingForm({ moduleId, learnerId, onBooked, onCancel }) {
       const conversation = inbox.data.data.conversations.find((item) => !learnerId || String(item.beneficiaryId) === String(learnerId));
       setDetails({ title: module?.title || 'this topic', withName: conversation?.otherUserName || module?.specialistName || 'your partner' });
     }).catch(() => setDetails({ title: 'this topic', withName: 'your partner' }));
+    axiosClient.get(`/sessions/modules/${moduleId}/free-times`, { params: { beneficiaryId: learnerId || undefined } })
+      .then((response) => setFree(response.data.data))
+      .catch((requestError) => {
+        setFree({ failed: true });
+        setError(requestError.response?.data?.message || 'Unable to load the free times.');
+      });
   }, [moduleId, learnerId]);
+
+  const who = free?.isMe ? 'You are' : `${free?.specialistName || 'Your specialist'} is`;
 
   async function submit(event) {
     event.preventDefault();
-    const startsAt = new Date(start);
-    if (!start || Number.isNaN(startsAt.getTime())) {
-      setError('Choose a date and time.');
+    const startsAt = freeStart(free?.slots, date, time, minutes);
+    if (!startsAt) {
+      setError('Choose a date and a start time inside the free times.');
       return;
     }
     if (!place.trim()) {
@@ -274,12 +319,10 @@ function BookingForm({ moduleId, learnerId, onBooked, onCancel }) {
     <section className="mb-8 rounded-2xl border-2 border-brand-200 bg-white p-5 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-wider text-accent-600">Book a face-to-face session</p>
       <h2 className="mt-1 text-lg font-semibold">{details ? `${details.title} with ${details.withName}` : <SkeletonBlock className="h-5 w-56" />}</h2>
-      <p className="mb-4 mt-1 text-sm text-slate-500">You meet in person. They get a notice and accept it on their Sessions page.</p>
+      <p className="mb-2 mt-1 text-sm text-slate-500">You meet in person. They get a notice and accept it on their Sessions page.</p>
+      {!free?.failed && <FreeTimesNote who={who} slots={free?.slots} />}
       <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
-        <label className="text-sm text-slate-600">
-          Date and time
-          <input required type="datetime-local" min={toLocalInputValue(new Date())} value={start} onChange={(event) => setStart(event.target.value)} className={inputClass} />
-        </label>
+        <FreeTimeFields slots={free?.slots} date={date} time={time} minutes={minutes} onDate={setDate} onTime={setTime} />
         <label className="text-sm text-slate-600">
           Length
           <select value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} className={inputClass}>
@@ -303,18 +346,26 @@ function BookingForm({ moduleId, learnerId, onBooked, onCancel }) {
 // A specialist posts an open face-to-face session that anyone who needs the topic can join.
 function OpenSessionForm({ topics, onPosted, onCancel }) {
   const [moduleId, setModuleId] = useState(topics.length === 1 ? String(topics[0].id) : '');
-  const [start, setStart] = useState('');
+  const [slots, setSlots] = useState(null);
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
   const [minutes, setMinutes] = useState(120);
   const [place, setPlace] = useState('');
   const [seats, setSeats] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    axiosClient.get('/users/me/circumstances')
+      .then((response) => setSlots(response.data.data?.availability || []))
+      .catch(() => setSlots([]));
+  }, []);
+
   async function submit(event) {
     event.preventDefault();
-    const startsAt = new Date(start);
+    const startsAt = freeStart(slots, date, time, minutes);
     if (!moduleId) return setError('Choose the topic.');
-    if (!start || Number.isNaN(startsAt.getTime())) return setError('Choose a date and time.');
+    if (!startsAt) return setError('Choose a date and a start time inside your free times.');
     if (!place.trim()) return setError('Add the place where you will meet.');
     setSaving(true);
     setError('');
@@ -338,7 +389,8 @@ function OpenSessionForm({ topics, onPosted, onCancel }) {
     <section className="mb-8 rounded-2xl border-2 border-brand-200 bg-white p-5 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-wider text-accent-600">Open face-to-face session</p>
       <h2 className="mt-1 text-lg font-semibold">Meet everyone who needs a topic</h2>
-      <p className="mb-4 mt-1 text-sm text-slate-500">Beneficiaries who need this topic see it on their Sessions page and can join, even if they aren&apos;t your learners yet.</p>
+      <p className="mb-2 mt-1 text-sm text-slate-500">Beneficiaries who need this topic see it on their Sessions page and can join, even if they aren&apos;t your learners yet.</p>
+      {topics.length > 0 && <FreeTimesNote who="You are" slots={slots} />}
       {!topics.length && <p className="text-sm text-slate-600">You don&apos;t teach any topic yet. Choose your topics in My Teaching Plan first.</p>}
       {topics.length > 0 && (
         <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
@@ -349,10 +401,7 @@ function OpenSessionForm({ topics, onPosted, onCancel }) {
               {topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.title}</option>)}
             </select>
           </label>
-          <label className="text-sm text-slate-600">
-            Date and time
-            <input required type="datetime-local" min={toLocalInputValue(new Date())} value={start} onChange={(event) => setStart(event.target.value)} className={inputClass} />
-          </label>
+          <FreeTimeFields slots={slots} date={date} time={time} minutes={minutes} onDate={setDate} onTime={setTime} />
           <label className="text-sm text-slate-600">
             Length
             <select value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} className={inputClass}>
@@ -478,10 +527,10 @@ export default function Sessions() {
       <PageHeader
         title="Sessions"
         subtitle={isSpecialist
-          ? 'Face-to-face sessions you book or post, and the online sessions added each day a learner works on your module. Book one-on-one from a topic’s chat in Modules.'
+          ? 'Face-to-face sessions you book or post, and the online sessions added each time a learner takes a test in your module. Book one-on-one from a topic’s chat in Modules.'
           : onlineOnly
-            ? 'You live outside the Philippines, so you learn online. An online session is added each day you work on a module.'
-            : 'Face-to-face sessions you book or join, and the online sessions added each day you work on a module. Book one-on-one from a topic’s chat in Modules.'}
+            ? 'You live outside the Philippines, so you learn online. An online session is added each time you take a test.'
+            : 'Face-to-face sessions you book or join, and the online sessions added each time you take a test. Book one-on-one from a topic’s chat in Modules.'}
         actions={(
           <>
             {isSpecialist && <button type="button" onClick={() => setPosting(true)} className={headerPrimaryClass}>+ Open face-to-face session</button>}
@@ -548,7 +597,7 @@ export default function Sessions() {
 
           {onlineOnly && (
             <p className="mb-8 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
-              Face-to-face sessions are for beneficiaries in the Philippines. You learn online: answer your topic’s activities and tests, and message your specialist in Modules.
+              Face-to-face sessions are for beneficiaries in the Philippines. You learn online: take your topic’s tests, and message your specialist in Modules.
             </p>
           )}
           {!onlineOnly && <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">Upcoming face-to-face</h2>}
@@ -572,7 +621,7 @@ export default function Sessions() {
 
           <section className="mt-8">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Online sessions ({online.length})</h2>
-            <p className="mb-3 mt-1 text-sm text-slate-500">Added automatically each day {isSpecialist ? 'a learner works on your module' : 'you work on a module'} online: answering an activity or taking a pre-test or post-test.</p>
+            <p className="mb-3 mt-1 text-sm text-slate-500">Added automatically each time {isSpecialist ? 'a learner takes' : 'you take'} a pre-test or post-test. Each one is its own session.</p>
             {online.length
               ? (
                 <>
@@ -586,7 +635,7 @@ export default function Sessions() {
                   )}
                 </>
               )
-              : <p className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-slate-500">No online sessions yet. One starts the first time {isSpecialist ? 'a learner answers' : 'you answer'} an activity or takes a test in a module.</p>}
+              : <p className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-slate-500">No online sessions yet. One starts the first time {isSpecialist ? 'a learner takes' : 'you take'} a test in a module.</p>}
           </section>
 
           {(!onlineOnly || past.length > 0) && <section className="mt-8">

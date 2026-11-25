@@ -3,6 +3,7 @@ import AppLayout from '../../components/layout/AppLayout';
 import axiosClient from '../../api/axiosClient';
 import { WeeklyTrendChart } from '../../components/charts/PipelineCharts';
 import { SkeletonLines } from '../../components/ui/Skeleton';
+import DirectChatPanel, { MessageButton } from '../../components/chat/DirectChatPanel';
 import {
   AdminHeader,
   DateCell,
@@ -27,7 +28,7 @@ const PROGRESS = { incoming: 'Incoming', ongoing: 'Ongoing', completed: 'Complet
 const PROGRESS_STYLES = { incoming: 'text-accent-600', ongoing: 'text-brand-600', completed: 'text-emerald-700' };
 const LEVEL_LABELS = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced', expert: 'Expert' };
 
-function SpecialistDetail({ id }) {
+function SpecialistDetail({ id, onChat }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [learnerFilter, setLearnerFilter] = useState('');
@@ -44,6 +45,7 @@ function SpecialistDetail({ id }) {
   return (
     <div className="space-y-6">
       <ProfileHeader name={data.full_name} email={data.email} src={data.avatar_url} status={data.status} />
+      <div className="flex flex-wrap items-center gap-2"><MessageButton userId={id} onOpen={onChat} /></div>
       <section>
         <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-accent-600">Profile</h3>
         <dl>
@@ -112,14 +114,15 @@ function SpecialistDetail({ id }) {
 }
 
 export default function AdminSpecialists() {
-  const { rows, pagination, extra, loading, error, params, setParam, setParams, clearAll } = useDirectory('/admin/specialists', { sort: 'name' });
+  const { rows, pagination, extra, loading, error, params, setParam, setParams, clearAll, reload } = useDirectory('/admin/specialists', { sort: 'name' });
   const [selected, setSelected] = useState(null);
+  const [chat, setChat] = useState(null);
   const topics = extra.filters?.topics || [];
   const counts = extra.counts || {};
   const filtered = Object.keys(params).some((key) => !['sort', 'page', 'topics'].includes(key));
 
   const columns = [
-    { key: 'name', label: 'Specialist', render: (row) => <PersonCell name={row.full_name} detail={row.email} status={row.status} avatar={row.avatar_url} /> },
+    { key: 'name', label: 'Specialist', render: (row) => <div className="flex items-center gap-2"><PersonCell name={row.full_name} detail={row.email} status={row.status} avatar={row.avatar_url} />{row.unread_messages > 0 && <span className="shrink-0 rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">{row.unread_messages}<span className="sr-only"> unread messages</span></span>}</div> },
     { key: 'topics', label: 'Topics taught', render: (row) => <span className="line-clamp-2 max-w-xs text-slate-700">{row.topics_taught || <span className="text-slate-400">None yet</span>}</span> },
     { key: 'incoming', label: 'Incoming', align: 'right' },
     { key: 'ongoing', label: 'Ongoing', align: 'right' },
@@ -139,6 +142,7 @@ export default function AdminSpecialists() {
             tabs={[
               { value: '', label: 'All', count: counts.everyone },
               { value: 'none', label: 'No topics yet', count: counts.none, alert: counts.none > 0 },
+              { value: 'messages', label: 'Messages', count: counts.messages, alert: counts.unread > 0 },
             ]}
           />
         )}
@@ -167,14 +171,15 @@ export default function AdminSpecialists() {
           error={error}
           onRowClick={(row) => setSelected(row)}
           selectedKey={selected?.id}
-          emptyText={filtered ? 'No specialists match these filters.' : 'No specialists yet.'}
+          emptyText={filtered ? 'No specialists match these filters.' : params.topics === 'messages' ? 'No specialist has replied yet. Write to one with Message in their View panel.' : 'No specialists yet.'}
         />
         <Pagination pagination={pagination} onPage={(page) => setParam('page', String(page))} noun="specialists" />
       </section>
 
       <DetailPanel open={Boolean(selected)} title={selected?.full_name || ''} onClose={() => setSelected(null)}>
-        {selected && <SpecialistDetail id={selected.id} />}
+        {selected && <SpecialistDetail id={selected.id} onChat={setChat} />}
       </DetailPanel>
+      {chat && <DirectChatPanel conversation={chat} subtitle="Specialist" onClose={() => { setChat(null); reload(); }} onChanged={() => window.dispatchEvent(new Event('admin-counts-changed'))} />}
     </AppLayout>
   );
 }

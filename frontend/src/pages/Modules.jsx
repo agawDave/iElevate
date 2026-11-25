@@ -7,8 +7,7 @@ import axiosClient from '../api/axiosClient';
 import ModuleChatPanel from '../components/modules/ModuleChatPanel';
 import MaterialsPanel from '../components/modules/MaterialsPanel';
 import LearnerProfilePanel from '../components/modules/LearnerProfilePanel';
-import ActivitiesPanel from '../components/modules/ActivitiesPanel';
-import AnswersPanel from '../components/modules/AnswersPanel';
+import TestsPanel from '../components/modules/TestsPanel';
 import PageHeader, { HeaderStat, headerButtonClass } from '../components/layout/PageHeader';
 import { openCertificate } from '../lib/certificates';
 import { formatDay, waitedFor } from '../lib/sessions';
@@ -119,7 +118,6 @@ function SpecialistChoices({ options, topicHours, busy, onApply }) {
                   by {option.name}
                   {/* The card's band already shows the training design's hours. */}
                   {option.module.hours && option.module.hours !== topicHours ? ` · ${option.module.hours} hours` : ''}
-                  {` · ${option.module.activities} activit${option.module.activities === 1 ? 'y' : 'ies'}`}
                   {option.module.testQuestions ? ' · pre/post-test' : ''}
                 </p>
               )}
@@ -140,8 +138,7 @@ function LearnerCard({ module, conversation, stage, options, progress, applyingT
   const specialist = module.specialistName || conversation?.otherUserName;
   const specialistFirst = (specialist || '').split(' ')[0];
   const unread = conversation?.unreadCount || 0;
-  const total = progress?.total || 0;
-  const done = progress?.done || 0;
+  const hours = progress?.faceToFace;
   // No specialist has an approved module for the topic yet.
   const comingSoon = stage === 'apply' && module.assignmentStatus !== 'queued' && module.hasModules === false;
   const badge = STAGE_BADGES[stage === 'apply' && module.assignmentStatus === 'queued' ? 'queued' : comingSoon ? 'soon' : stage];
@@ -152,9 +149,7 @@ function LearnerCard({ module, conversation, stage, options, progress, applyingT
     const label = stage === 'completed' ? 'Open module'
       : progress?.postTestOpen ? 'Take the post-test'
         : progress?.preTestOpen ? 'Take the pre-test'
-          : !total ? 'Open module'
-            : done === 0 ? 'Start module'
-              : done < total ? 'Continue module' : 'Review module';
+          : 'Open module';
     moduleButton = <Link to={`/modules/${module.id}`} className={stage === 'ongoing' ? buttonStyles.primary : buttonStyles.outline}>{label}{stage === 'ongoing' ? ' →' : ''}</Link>;
   }
   let status;
@@ -180,14 +175,11 @@ function LearnerCard({ module, conversation, stage, options, progress, applyingT
       </p>
     );
   } else if (stage === 'ongoing') {
-    status = total > 0 ? (
+    status = hours?.hours > 0 && !hours.onlineOnly ? (
       <div>
-        <div className="flex items-center justify-between text-xs text-slate-600">
-          <span>{done} of {total} activities done</span>
-          {progress.replies > 0 && <span>{progress.replies} repl{progress.replies === 1 ? 'y' : 'ies'} from {specialistFirst}</span>}
-        </div>
-        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-stone-200" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done} aria-label="Activities done">
-          <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.round((done / total) * 100)}%` }} />
+        <p className="text-xs text-slate-600">Face-to-face: {hours.hoursDone} of {hours.hours} hours</p>
+        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-stone-200" role="progressbar" aria-valuemin={0} aria-valuemax={hours.hours} aria-valuenow={hours.hoursDone} aria-label="Face-to-face hours">
+          <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, Math.round((hours.hoursDone / hours.hours) * 100))}%` }} />
         </div>
       </div>
     ) : (
@@ -248,7 +240,7 @@ function ModuleNextStep({ module, status, mine }) {
     return (
       <div className="mb-4 rounded-xl border border-dashed border-stone-300 bg-stone-50 px-4 py-3.5">
         <p className="text-sm font-semibold text-slate-900">Finish your module and submit it</p>
-        <p className="mt-0.5 text-xs leading-5 text-slate-600">It&apos;s saved as a draft. Add your materials and activities, then send it to the admin.</p>
+        <p className="mt-0.5 text-xs leading-5 text-slate-600">It&apos;s saved as a draft. Add your materials and the pre/post-test, then send it to the admin.</p>
         <Link to={editor} className={`mt-3 inline-block ${buttonStyles.primary}`}>Continue →</Link>
       </div>
     );
@@ -263,14 +255,14 @@ function ModuleNextStep({ module, status, mine }) {
     );
   }
   if (status === 'pending') {
-    return <p className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">Sent to the admin{mine.submittedAt ? ` on ${formatDay(mine.submittedAt)}` : ''}. You can keep adding activities while you wait.</p>;
+    return <p className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">Sent to the admin{mine.submittedAt ? ` on ${formatDay(mine.submittedAt)}` : ''}. You can keep adding materials while you wait.</p>;
   }
   return null;
 }
 
 // One topic the specialist teaches: their own module for it (or the step to
 // create one), and how many learners are at each stage.
-function TeachingTopicCard({ module, counts, waiting = 0, activityCount, testQuestionCount, onOpenTab, onMaterials, onActivities }) {
+function TeachingTopicCard({ module, counts, waiting = 0, testQuestionCount, onOpenTab, onMaterials, onTests }) {
   const mine = module.myModule;
   const status = mine?.status || 'none';
   const statusInfo = moduleStatusOf(mine);
@@ -309,15 +301,13 @@ function TeachingTopicCard({ module, counts, waiting = 0, activityCount, testQue
       {!module.canAddMaterials && <p className="mb-3 text-xs text-slate-500">You no longer teach this topic. Your current learners stay with you.</p>}
       {live && (
         <>
-          <p className={`mb-3 text-xs ${activityCount && testQuestionCount ? 'text-slate-500' : 'text-amber-800'}`}>
+          <p className={`mb-3 text-xs ${testQuestionCount ? 'text-slate-500' : 'text-amber-800'}`}>
             {mine?.hours ? `${mine.hours} hours · ` : ''}
-            {activityCount ? `${activityCount} activit${activityCount === 1 ? 'y' : 'ies'}` : 'no activities yet'}
-            {' · '}
             {testQuestionCount ? `pre/post-test: ${testQuestionCount} question${testQuestionCount === 1 ? '' : 's'}` : 'no pre/post-test yet'}
           </p>
           <div className="mt-auto flex flex-wrap gap-2">
-            <button type="button" onClick={onActivities} className={activityCount && testQuestionCount ? buttonStyles.outline : buttonStyles.primary}>
-              Tests &amp; activities
+            <button type="button" onClick={onTests} className={testQuestionCount ? buttonStyles.outline : buttonStyles.primary}>
+              Pre/post-test
             </button>
             <button type="button" onClick={onMaterials} className={buttonStyles.outline}>Materials</button>
             <Link to={moduleEditorPath(module.id)} className={buttonStyles.outline}>Edit module</Link>
@@ -423,10 +413,10 @@ export default function Modules() {
   const [conversations, setConversations] = useState([]);
   const [applications, setApplications] = useState([]);
   const [options, setOptions] = useState({});
-  // Learners: { moduleId: {total, done, replies} }. Specialists: { learners, activityCounts }.
-  const [activityInfo, setActivityInfo] = useState({});
-  const [activitiesFor, setActivitiesFor] = useState(null);
-  const [answersFor, setAnswersFor] = useState(null);
+  // Learners: { moduleId: { faceToFace, preTestOpen, postTestOpen } }.
+  // Specialists: { learners (scores, face-to-face hours), testQuestionCounts }.
+  const [progressInfo, setProgressInfo] = useState({});
+  const [testsFor, setTestsFor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   // A message passed from another page (e.g. "sent to the admin" after submitting a module).
@@ -437,20 +427,20 @@ export default function Modules() {
 
   const load = useCallback(async () => {
     try {
-      const [modulesResponse, inboxResponse, applicationsResponse, activitiesResponse] = await Promise.all([
+      const [modulesResponse, inboxResponse, applicationsResponse, progressResponse] = await Promise.all([
         axiosClient.get('/modules', { params: { limit: 50, sort: 'curriculum' } }),
         axiosClient.get('/messages/inbox'),
         // Specialists: applications waiting for them. Learners: the specialists
         // they can apply to for each topic.
         axiosClient.get(isSpecialist ? '/elevate/applications/incoming' : '/elevate/applications/options'),
-        // Activity progress (learners) or learners' progress and activity counts (specialists).
+        // Face-to-face hours and tests (learners), or their learners' (specialists).
         axiosClient.get(isSpecialist ? '/elevate/activities/summary' : '/elevate/activities/progress'),
       ]);
       setModules(Array.isArray(modulesResponse.data?.data) ? modulesResponse.data.data : []);
       setConversations(inboxResponse.data.data.conversations);
       if (isSpecialist) setApplications(applicationsResponse.data.data);
       else setOptions(applicationsResponse.data.data);
-      setActivityInfo(activitiesResponse.data.data);
+      setProgressInfo(progressResponse.data.data);
       setError('');
     } catch (loadError) {
       setError(loadError.response?.data?.message || 'Unable to load your modules. Please try again.');
@@ -479,21 +469,14 @@ export default function Modules() {
   const moduleById = useMemo(() => new Map(modules.map((module) => [String(module.id), module])), [modules]);
   const conversationByModule = useMemo(() => new Map(conversations.map((item) => [String(item.moduleId), item])), [conversations]);
 
-  // Links from the specialist dashboard open a panel straight away:
-  // ?answers=<moduleId>:<beneficiaryId> (a learner's answers), ?activities=<moduleId>.
+  // A link from the specialist dashboard opens a topic's pre/post-test: ?tests=<moduleId>.
   useEffect(() => {
     if (loading || !isSpecialist) return;
-    const answers = searchParams.get('answers');
-    const activities = searchParams.get('activities');
-    if (!answers && !activities) return;
-    if (answers) {
-      const [moduleId, beneficiaryId] = answers.split(':');
-      setAnswersFor({ moduleId: Number(moduleId), beneficiaryId: Number(beneficiaryId), moduleTitle: moduleById.get(String(moduleId))?.title || '' });
-    } else if (moduleById.has(String(activities))) {
-      setActivitiesFor(Number(activities));
-    }
+    const tests = searchParams.get('tests');
+    if (!tests) return;
+    if (moduleById.has(String(tests))) setTestsFor(Number(tests));
     const next = new URLSearchParams(searchParams);
-    ['answers', 'activities'].forEach((key) => next.delete(key));
+    next.delete('tests');
     setSearchParams(next, { replace: true });
   }, [loading, isSpecialist, searchParams, setSearchParams, moduleById]);
 
@@ -557,6 +540,8 @@ export default function Modules() {
   }
   const accept = (application) => act(`accept-${application.moduleId}-${application.beneficiaryId}`,
     () => axiosClient.post(`/elevate/applications/${application.moduleId}/${application.beneficiaryId}/accept`));
+  const openPostTest = (item) => act(`post-${item.moduleId}-${item.beneficiaryId}`,
+    () => axiosClient.post(`/elevate/tests/module/${item.moduleId}/learners/${item.beneficiaryId}/open-post`));
   async function decline(application) {
     if (!await confirm({ title: `Decline ${application.learnerName}'s application?`, message: `Their application for ${application.moduleTitle} goes to the next specialist who fits.`, confirmLabel: 'Decline', danger: true })) return;
     act(`decline-${application.moduleId}-${application.beneficiaryId}`,
@@ -567,11 +552,21 @@ export default function Modules() {
   const topicOf = (moduleId, title, phase) => moduleById.get(String(moduleId)) || { id: moduleId, title, phase };
   // The other person wrote last in an ongoing chat (same rule as the sidebar reminder).
   const waitingForReply = (item) => item.status === 'ongoing' && Boolean(item.lastSenderId) && String(item.lastSenderId) !== String(user?.id);
-  // A specialist's view of one learner's activity progress on a topic.
-  const progressOf = (item) => (activityInfo.learners || []).find(
+  // A specialist's view of one learner on a topic: test scores and face-to-face hours.
+  const progressOf = (item) => (progressInfo.learners || []).find(
     (entry) => String(entry.moduleId) === String(item.moduleId) && String(entry.beneficiaryId) === String(item.beneficiaryId)
-  ) || { total: 0, done: 0, toReview: 0, preTest: null, postTest: null };
-  const hasTest = (item) => (activityInfo.testQuestionCounts?.[item.moduleId] || 0) > 0;
+  ) || { faceToFace: null, preTest: null, postTest: null };
+  const hasTest = (item) => (progressInfo.testQuestionCounts?.[item.moduleId] || 0) > 0;
+  // Face-to-face hours done and no post-test yet: the specialist can open it.
+  const canOpenPost = (item) => {
+    const { faceToFace, postTest } = progressOf(item);
+    return hasTest(item) && !postTest && Boolean(faceToFace?.ready) && !faceToFace.postTestOpened;
+  };
+  const hoursText = (faceToFace) => {
+    if (!faceToFace) return '';
+    if (faceToFace.onlineOnly) return 'Online only';
+    return `Face-to-face: ${faceToFace.hoursDone} of ${faceToFace.hours} hours`;
+  };
   const score = (attempt) => (attempt ? `${attempt.score}/${attempt.total}` : '—');
   // ELEVATE Phase 1, Phase 2, … in curriculum order.
   const phaseOrder = [...new Set(modules.map((module) => module.phase))];
@@ -593,7 +588,7 @@ export default function Modules() {
             conversation={conversation}
             stage={stage}
             options={options[module.id] || []}
-            progress={activityInfo[module.id]}
+            progress={progressInfo[module.id]}
             waiting={Boolean(conversation) && waitingForReply(conversation)}
             applyingTo={busy.startsWith(`apply-${module.id}-`) ? Number(busy.split('-')[2]) : null}
             onApply={apply}
@@ -631,11 +626,10 @@ export default function Modules() {
             module={module}
             counts={countFor(module.id)}
             waiting={conversations.filter((item) => String(item.moduleId) === String(module.id) && waitingForReply(item)).length}
-            activityCount={activityInfo.activityCounts?.[module.id] || 0}
-            testQuestionCount={activityInfo.testQuestionCounts?.[module.id] || 0}
+            testQuestionCount={progressInfo.testQuestionCounts?.[module.id] || 0}
             onOpenTab={(key) => setParams({ tab: key })}
             onMaterials={() => setMaterialsFor(module.id)}
-            onActivities={() => setActivitiesFor(module.id)}
+            onTests={() => setTestsFor(module.id)}
           />
         )}
       />
@@ -670,7 +664,6 @@ export default function Modules() {
                   )}
                 >
                   <p>Applied {formatDay(item.appliedAt)}{item.place ? ` · ${item.place}` : ''}{item.band ? ` · Pre-assessment: ${BAND_LABELS[item.band] || item.band}` : ''}</p>
-                  {item.notes && <p className="mt-0.5 line-clamp-2 italic text-slate-600">&ldquo;{item.notes}&rdquo;</p>}
                 </LearnerRow>
               );
             })}
@@ -706,9 +699,9 @@ export default function Modules() {
                     {tab === 'completed' && item.certificateHasFile && (
                       <button type="button" onClick={() => openCertificate(item.certificateId)} className={buttonStyles.outline}>View certificate</button>
                     )}
-                    {(progressOf(item).total > 0 || hasTest(item)) && (
-                      <button type="button" onClick={() => setAnswersFor({ moduleId: item.moduleId, beneficiaryId: item.beneficiaryId, moduleTitle: module.title })} className={buttonStyles.outline}>
-                        Answers{progressOf(item).toReview ? ` (${progressOf(item).toReview} to read)` : ''}
+                    {tab === 'ongoing' && canOpenPost(item) && (
+                      <button type="button" disabled={Boolean(busy)} onClick={() => openPostTest(item)} className={buttonStyles.green}>
+                        {busy === `post-${item.moduleId}-${item.beneficiaryId}` ? 'Opening…' : 'Open post-test'}
                       </button>
                     )}
                     <button type="button" onClick={() => openChat(item)} className={`relative ${tab === 'ongoing' ? buttonStyles.primary : buttonStyles.outline}`}>
@@ -723,13 +716,13 @@ export default function Modules() {
                   : waitingForReply(item)
                     ? <p className="font-medium text-amber-700">Waiting {waitedFor(item.lastMessageAt)} for your reply</p>
                     : <p className="truncate">{item.lastMessage || 'Accepted. Say hello!'}</p>}
-                {(progressOf(item).total > 0 || hasTest(item) || progressOf(item).preTest) && (
-                  <p className="mt-0.5">
-                    {(hasTest(item) || progressOf(item).preTest) && <>Pre-test {score(progressOf(item).preTest)} → Post-test {score(progressOf(item).postTest)}{progressOf(item).total > 0 ? ' · ' : ''}</>}
-                    {progressOf(item).total > 0 && <>Activities: {progressOf(item).done} of {progressOf(item).total} done</>}
-                    {progressOf(item).toReview > 0 &&<span className="ml-1 font-semibold text-amber-700">· {progressOf(item).toReview} answer{progressOf(item).toReview === 1 ? '' : 's'} to read</span>}
-                  </p>
-                )}
+                <p className="mt-0.5">
+                  {[
+                    (hasTest(item) || progressOf(item).preTest) && `Pre-test ${score(progressOf(item).preTest)} → Post-test ${score(progressOf(item).postTest)}`,
+                    tab === 'ongoing' && hoursText(progressOf(item).faceToFace),
+                    tab === 'ongoing' && !progressOf(item).postTest && progressOf(item).faceToFace?.postTestOpened && 'post-test open',
+                  ].filter(Boolean).join(' · ')}
+                </p>
               </LearnerRow>
             ))}
           </TopicSection>
@@ -804,21 +797,13 @@ export default function Modules() {
             onChanged={load}
             onClose={closeChat}
             onViewProfile={isSpecialist ? () => setProfileFor(openConversation.beneficiaryId) : undefined}
+            progress={isSpecialist ? { ...progressOf(openConversation), hasTest: hasTest(openConversation) } : null}
           />
         </ChatDrawer>
       )}
       {profileFor && <LearnerProfilePanel beneficiaryId={profileFor} onClose={() => setProfileFor(null)} />}
-      {activitiesFor && (
-        <ActivitiesPanel topicId={activitiesFor} topics={modules.map((module) => ({ id: module.id, title: module.title }))} onClose={() => setActivitiesFor(null)} onChanged={load} />
-      )}
-      {answersFor && (
-        <AnswersPanel
-          moduleId={answersFor.moduleId}
-          beneficiaryId={answersFor.beneficiaryId}
-          moduleTitle={answersFor.moduleTitle}
-          onClose={() => setAnswersFor(null)}
-          onChanged={load}
-        />
+      {testsFor && (
+        <TestsPanel topicId={testsFor} topics={modules.map((module) => ({ id: module.id, title: module.title }))} onClose={() => setTestsFor(null)} onChanged={load} />
       )}
       {materialsFor && (
         <MaterialsPanel topicId={materialsFor} topics={isSpecialist ? teachingTopics : []} onClose={() => setMaterialsFor(null)} />

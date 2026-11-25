@@ -5,7 +5,7 @@ import { ActivityFileLink, FilePicker } from '../modules/ActivityFiles';
 import { RubricSummary } from '../modules/Rubric';
 import { openCertificate } from '../../lib/certificates';
 import { ACTIVITY_FILE_HINT } from '../../lib/activityFiles';
-import { BAND_LABELS, BAND_STYLES, EDUCATION_LABELS, GOAL_LABELS } from '../../lib/profileLabels';
+import { BAND_LABELS, BAND_STYLES, EDUCATION_LABELS } from '../../lib/profileLabels';
 import { avatarTint, initials } from '../../lib/people';
 import EmptyState from '../ui/EmptyState';
 import { TopicTile } from '../ui/TopicFace';
@@ -376,7 +376,7 @@ export default function PortfolioView({ data, own = true, onChanged }) {
   const aboutRows = [
     ['School or organization', about.schoolOrOrg],
     ['Education', EDUCATION_LABELS[about.education]],
-    ['Goal', GOAL_LABELS[about.goalTrack]],
+    ['Goal', about.goalLabel],
     ['Address', person.place],
     ['Joined iELEVATE', longDate(person.joinedAt)],
   ].filter(([, value]) => value);

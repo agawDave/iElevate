@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import axiosClient from '../../api/axiosClient';
-import { SkeletonBlock } from '../ui/Skeleton';
 import { useConfirm } from '../../context/ConfirmContext';
 import ChoiceInputs, { enterGoesTo, fillChoiceBoxes, filledChoiceCount, packChoices } from './ChoiceInputs';
 
@@ -25,34 +24,10 @@ export function useTestQuestions(moduleId) {
   return { test, error, reload: load };
 }
 
-// The summary box at the top of the Activities panel.
-export function TestSummaryBox({ test, onEdit }) {
-  const count = test?.questions.length || 0;
-  const taken = test ? test.taken.pre : 0;
-  return (
-    <section className="mb-5 rounded-xl border border-brand-200 bg-brand-50/50 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="font-semibold text-slate-900">Pre-test &amp; post-test</p>
-          <p className="mt-0.5 text-sm text-slate-600">
-            {!test ? <span role="status" className="block pt-1"><SkeletonBlock className="h-3.5 w-72 max-w-full" /><span className="sr-only">Loading the test…</span></span>
-              : count
-                ? `${count} question${count === 1 ? '' : 's'}, checked automatically. Learners take it before the activities and again at the end.${taken ? ` ${taken} took the pre-test.` : ''}`
-                : 'No test yet. Add multiple-choice questions, and learners take them before the activities (pre-test) and again at the end (post-test).'}
-          </p>
-        </div>
-        <button type="button" onClick={onEdit} disabled={!test} className="shrink-0 rounded-lg border border-brand-600 bg-white px-3 py-1.5 text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-50">
-          {count ? 'Edit questions' : 'Add questions'}
-        </button>
-      </div>
-    </section>
-  );
-}
-
 // The specialist writes the test: multiple-choice questions, one correct choice
 // each. One at a time here, or many at once with Paste questions (onPaste).
 // Rendered with key={moduleId}, so a new topic starts it fresh.
-export default function TestQuestionsEditor({ moduleId, topicTitle, test, onChanged, onBack, onPaste, initialNotice = '' }) {
+export default function TestQuestionsEditor({ moduleId, topicTitle, test, onChanged, onPaste, initialNotice = '' }) {
   const confirm = useConfirm();
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState('');
@@ -108,10 +83,8 @@ export default function TestQuestionsEditor({ moduleId, topicTitle, test, onChan
   const input = 'mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200';
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-3 text-sm text-slate-500 hover:text-brand-600">← Back to activities</button>
-      <h3 className="text-lg font-semibold text-slate-900">Pre-test &amp; post-test</h3>
-      <p className="mb-4 mt-1 text-sm text-slate-600">
-        Your learners in {topicTitle} answer these questions before the activities (pre-test) and the same questions again after finishing them (post-test), so you both see what they learned. They see their score, but not the correct answers until after the post-test.
+      <p className="mb-4 text-sm text-slate-600">
+        Your learners in {topicTitle} answer these before learning (pre-test), and again after their face-to-face sessions, once you open it (post-test).
       </p>
       {takenBy > 0 && (
         <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">

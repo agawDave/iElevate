@@ -16,11 +16,13 @@ const {
 const { listModulesForReview, getModuleForReview, reviewSpecialistModule } = require('../controllers/specialistModuleController');
 const { beneficiaryPortfolio } = require('../controllers/portfolioController');
 const { adminOverview } = require('../controllers/adminOverviewController');
+const { openAdminChat } = require('../controllers/messageController');
 const {
   getTrainingDesign,
   addPhase,
   updatePhase,
   deletePhase,
+  saveGoals,
   addModule,
   updateModule,
   moveModule,
@@ -47,12 +49,15 @@ router.get('/specialists', listSpecialists);
 router.get('/specialists/:id', getSpecialist);
 router.get('/users', listUsers);
 router.patch('/users/:userId/status', updateUserStatus);
+router.post('/users/:userId/chat', openAdminChat);
 
 // Training design: the ELEVATE phases (each with its year) and their modules, managed by the project leader.
 router.get('/training-design', getTrainingDesign);
 router.post('/training-design/phases', addPhase);
 router.patch('/training-design/phases/:number', updatePhase);
 router.delete('/training-design/phases/:number', deletePhase);
+// The answers to the pre-assessment's "main goal" question.
+router.put('/training-design/goals', saveGoals);
 router.post('/training-design/modules', addModule);
 router.put('/training-design/modules/:moduleId', updateModule);
 router.post('/training-design/modules/:moduleId/move', moveModule);

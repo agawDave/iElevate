@@ -4,31 +4,14 @@ const { pool } = require('../config/db');
 const { signActivityFileToken, verifyActivityFileToken } = require('../config/jwt');
 const { activityFilePath } = require('../middleware/activityFileUpload');
 
-// Who may open a file-task file:
-//   the worksheet (task) - the specialist who made it, the learners they
-//                          accepted on that topic, and admins;
-//   a learner's answer    - that learner, the activity's specialist, and admins;
+// Who may open a file:
+//   a past module answer  - that learner, the activity's specialist, and admins;
 //   a portfolio item      - the beneficiary who added it, and admins;
 //   an uploaded resume    - its owner, and admins (id = the owner's user id).
 async function findViewableFile(kind, id, viewerId) {
   const [[viewer]] = await pool.query('SELECT role, status FROM users WHERE id = ?', [viewerId]);
   if (!viewer || viewer.status !== 'active') return null;
   const isAdmin = ['admin', 'moderator'].includes(viewer.role);
-
-  if (kind === 'task') {
-    const [rows] = await pool.query(
-      `SELECT act.id, act.module_id, act.specialist_id, act.file_storage_name, act.file_original_name, act.file_mime_type,
-              EXISTS (SELECT 1 FROM elevate_module_assignments a
-                      WHERE a.module_id = act.module_id AND a.specialist_id = act.specialist_id
-                        AND a.beneficiary_id = ? AND a.assignment_status = 'assigned') AS viewer_is_learner
-       FROM module_activities act WHERE act.id = ? AND act.activity_type = 'file'`,
-      [viewerId, id]
-    );
-    const row = rows[0];
-    if (!row || !row.file_storage_name) return null;
-    const allowed = isAdmin || Number(row.specialist_id) === Number(viewerId) || Number(row.viewer_is_learner) === 1;
-    return allowed ? row : null;
-  }
 
   if (kind === 'answer') {
     const [rows] = await pool.query(
@@ -118,7 +101,6 @@ async function streamActivityFile(req, res) {
 }
 
 module.exports = {
-  taskFileLink: linkHandler('task', 'activityId'),
   answerFileLink: linkHandler('answer', 'answerId'),
   portfolioFileLink: linkHandler('portfolio', 'itemId'),
   resumeFileLink: linkHandler('resume', 'userId'),

@@ -26,13 +26,12 @@ export function fileBadge(name = '') {
 export const opensInBrowser = (mimeType) => /^(application\/pdf|image\/)/.test(mimeType || '');
 
 const LINK_PATHS = {
-  task: (id) => `/elevate/activities/${id}/file/link`,
   answer: (id) => `/elevate/activities/answers/${id}/file/link`,
   portfolio: (id) => `/elevate/portfolio/items/${id}/file/link`,
 };
 
-// kind: 'task' (the worksheet, by activity id), 'answer' (by answer id) or
-// 'portfolio' (something the beneficiary added, by item id).
+// kind: 'answer' (a past module answer, by answer id) or 'portfolio'
+// (something the beneficiary added, by item id).
 // The tab is opened inside the click, before the link is fetched, so pop-up
 // blockers allow it.
 export async function openActivityFile(kind, id, mimeType) {

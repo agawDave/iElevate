@@ -82,6 +82,30 @@ async function loadInbox(userId, { moduleId = null } = {}) {
   });
 }
 
+// The admin's chats with this user (no topic), once the admin has written.
+async function loadAdminChats(userId) {
+  const [rows] = await pool.query(
+    `SELECT c.id, other.full_name AS other_user_name, other.avatar_url AS other_user_avatar,
+            last_message.body AS last_message, last_message.created_at AS last_message_at,
+            last_message.sender_id AS last_sender_id
+     FROM conversations c
+     JOIN users other ON other.id = IF(c.user_a_id = ?, c.user_b_id, c.user_a_id) AND other.role IN ('admin', 'moderator')
+     JOIN messages last_message ON last_message.id = (
+       SELECT m.id FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1
+     )
+     WHERE c.module_id IS NULL AND ? IN (c.user_a_id, c.user_b_id)`,
+    [userId, userId]
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    otherUserName: row.other_user_name,
+    otherUserAvatar: row.other_user_avatar,
+    lastMessage: row.last_message,
+    lastMessageAt: row.last_message_at,
+    lastSenderId: row.last_sender_id,
+  }));
+}
+
 function summarize(items) {
   const summary = {};
   ['incoming', 'ongoing', 'completed'].forEach((status) => {
@@ -94,4 +118,4 @@ function summarize(items) {
   return summary;
 }
 
-module.exports = { loadInbox, summarize };
+module.exports = { loadInbox, loadAdminChats, summarize };

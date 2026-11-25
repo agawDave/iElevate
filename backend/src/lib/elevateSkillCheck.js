@@ -7,6 +7,7 @@
 // phase), which the admin manages (lib/programPhases.js): each module has its task, the goals that need
 // it, its prerequisites, and a few options. `topics` below is that list:
 // { code, slug, title, phase, skillId, task, goals, needs, computerBased, foundation, note }.
+const { phaseNumber } = require('./programPhases');
 
 const RATING_SCALE = [
   { value: 0, label: 'Never' },
@@ -18,19 +19,14 @@ const RATING_SCALE = [
 const LEVEL_FOR_RATING = [0, 1.0, 2.0];
 
 // The beneficiary's goal decides which modules are asked about: only the ones
-// that list that goal. "Not sure yet" (showsAll) sees every module.
-const TRACKS = {
-  job: { label: 'Get hired for an office or BPO job' },
-  freelance: { label: 'Work from home as a freelancer or virtual assistant' },
-  business: { label: 'Start or grow my own online business' },
-  undecided: { label: 'Not sure yet', showsAll: true },
-};
-const GOAL_VALUES = ['job', 'freelance', 'business'];
+// that list that goal. The goals ({ value, label, startPhase }) are the admin's
+// (loadGoals in lib/programPhases.js). "Not sure yet" has a startPhase instead:
+// it's asked about that phase's modules (or the next phase's, once those are
+// all finished), or about every module when it's 0 (All phases).
 
 // Phases 2 and 3 reported scheduling conflicts and overload, so only a few
 // topics are matched at once; the rest wait as next up.
 const ACTIVE_TOPIC_LIMIT = 4;
-const MAX_NOTES_LENGTH = 1000;
 
 const BANDS = [
   { band: 'beginner', below: 1.0, proficiency: 'beginner', label: 'Beginner' },
@@ -49,26 +45,31 @@ function bandFor(level) {
 }
 
 // The modules shown for a goal, in the training design's order.
-function topicsForGoal(goalTrack, topics) {
-  const track = TRACKS[goalTrack];
-  if (!track) return [];
-  return track.showsAll ? topics : topics.filter((topic) => topic.goals.includes(goalTrack));
+function topicsForGoal(goalTrack, topics, goals) {
+  const goal = goals.find((item) => item.value === goalTrack);
+  if (!goal) return [];
+  if (goal.startPhase === null) return topics.filter((topic) => topic.goals.includes(goal.value));
+  if (goal.startPhase === 0) return topics;
+  const first = Math.min(...topics.map((topic) => phaseNumber(topic.phase)).filter((phase) => phase >= goal.startPhase));
+  return topics.filter((topic) => phaseNumber(topic.phase) === first);
 }
 
 // The modules the learner rates: their goal's modules, minus computer modules
 // when they have never used a computer (those start from the basics without being asked).
-function topicsToCheck(usedComputer, topics, goalTrack) {
-  return topicsForGoal(goalTrack, topics).filter((topic) => usedComputer || !topic.computerBased);
+function topicsToCheck(usedComputer, topics, goalTrack, goals) {
+  return topicsForGoal(goalTrack, topics, goals).filter((topic) => usedComputer || !topic.computerBased);
 }
 
-// The questionnaire as the learner sees it.
-function publicQuestionnaire(topics) {
+// The questionnaire as the learner sees it. A goal with no modules to ask about
+// (none ticked yet, or "Not sure yet" starting from an empty phase) isn't offered.
+function publicQuestionnaire(topics, goals) {
   return {
     ratingScale: RATING_SCALE,
-    tracks: Object.entries(TRACKS).map(([value, track]) => {
-      const shows = topicsForGoal(value, topics).map((topic) => topic.slug);
-      return { value, label: track.label, slugs: shows, shows };
-    }),
+    tracks: goals.map((goal) => {
+      const shows = topicsForGoal(goal.value, topics, goals).map((topic) => topic.slug);
+      // "Not sure yet" also carries the answer "Other", where they type their own goal.
+      return { value: goal.value, label: goal.label, slugs: shows, shows, undecided: goal.startPhase !== null };
+    }).filter((track) => track.shows.length),
     activeTopicLimit: ACTIVE_TOPIC_LIMIT,
     topics: topics.map((topic) => ({
       code: topic.code,
@@ -86,16 +87,18 @@ function isIntInRange(value, min, max) {
   return Number.isInteger(value) && value >= min && value <= max;
 }
 
-function validateSubmission(body, topics) {
+function validateSubmission(body, topics, goals) {
   const input = body || {};
   const profile = input.profile || {};
-  if (!TRACKS[profile.goalTrack]) return { error: 'Choose your main goal for joining ELEVATE.' };
+  const goal = goals.find((item) => item.value === profile.goalTrack);
+  if (!goal) return { error: 'Choose your main goal for joining ELEVATE.' };
+  // Nothing to ask would replace their topics with none.
+  if (!topicsForGoal(profile.goalTrack, topics, goals).length) return { error: 'This goal has no modules to ask about yet. Choose another goal.' };
+  // A goal typed under "Other" is saved with "Not sure yet", and asked about like it.
+  const goalOther = typeof profile.goalOther === 'string' && goal.startPhase !== null ? profile.goalOther.trim() : '';
+  if (goalOther.length > 150) return { error: 'Keep your goal to 150 characters.' };
   if (typeof profile.usedComputer !== 'boolean') return { error: 'Tell us whether you have used a computer before.' };
 
-  const phases = profile.phasesCompleted === undefined ? [] : profile.phasesCompleted;
-  if (!Array.isArray(phases) || phases.some((phase) => !isIntInRange(phase, 1, 4))) {
-    return { error: 'Choose the ELEVATE phases you finished from Phase 1 to Phase 4.' };
-  }
   const sex = profile.sex || null;
   if (sex && !PROFILE_OPTIONS.sex.includes(sex)) return { error: 'Choose a valid option for sex.' };
   const workStatus = profile.workStatus || null;
@@ -105,7 +108,7 @@ function validateSubmission(body, topics) {
 
   const answers = input.answers && typeof input.answers === 'object' ? input.answers : {};
   const cleanAnswers = {};
-  for (const topic of topicsToCheck(profile.usedComputer, topics, profile.goalTrack)) {
+  for (const topic of topicsToCheck(profile.usedComputer, topics, profile.goalTrack, goals)) {
     const rating = answers[topic.slug]?.rating;
     if (!isIntInRange(rating, 0, RATING_SCALE.length - 1)) {
       return { error: `Answer every row, including “${topic.task}”.` };
@@ -113,17 +116,12 @@ function validateSubmission(body, topics) {
     cleanAnswers[topic.slug] = { rating };
   }
 
-  // "Tell us more": free text the matched specialists can read.
-  const notes = typeof profile.notes === 'string' ? profile.notes.trim() : '';
-  if (notes.length > MAX_NOTES_LENGTH) return { error: `Keep “Tell us more” under ${MAX_NOTES_LENGTH} characters.` };
-
   return {
     value: {
       profile: {
         goalTrack: profile.goalTrack,
+        goalOther: goalOther || null,
         usedComputer: profile.usedComputer,
-        phasesCompleted: [...new Set(phases)].sort(),
-        notes: notes || null,
         sex,
         age,
         workStatus,
@@ -141,8 +139,8 @@ function joinTitles(titles) {
 // Level comes straight from the rating: Never 0, With help 1.0, On my own 2.0.
 // Modules below 2.0 are learning topics, in the training design's order; the
 // first four that aren't waiting on a prerequisite are active.
-function scoreSubmission({ profile, answers }, topics) {
-  const shown = topicsForGoal(profile.goalTrack, topics);
+function scoreSubmission({ profile, answers }, topics, goals) {
+  const shown = topicsForGoal(profile.goalTrack, topics, goals);
   const titleOf = (slug) => topics.find((topic) => topic.slug === slug)?.title || slug;
 
   const scored = shown.map((topic) => {
@@ -229,8 +227,6 @@ function scoreSubmission({ profile, answers }, topics) {
 module.exports = {
   ACTIVE_TOPIC_LIMIT,
   BANDS,
-  TRACKS,
-  GOAL_VALUES,
   publicQuestionnaire,
   validateSubmission,
   scoreSubmission,

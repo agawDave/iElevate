@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import axiosClient from '../../api/axiosClient';
 import { AdminHeader, DetailPanel, SearchBox } from '../../components/admin/Directory';
 import ModulesTabs from '../../components/admin/ModulesTabs';
-import { headerPrimaryClass } from '../../components/layout/PageHeader';
+import { headerButtonClass, headerPrimaryClass } from '../../components/layout/PageHeader';
 import { SkeletonLines } from '../../components/ui/Skeleton';
 import { useConfirm } from '../../context/ConfirmContext';
 
@@ -11,13 +11,11 @@ import { useConfirm } from '../../context/ConfirmContext';
 // is offered: the pre-assessment asks its task, beneficiaries are matched for
 // it, and specialists can pick it and make their own module for it.
 
-const GOAL_LABELS = { job: 'Office or BPO job', freelance: 'Freelancer or VA', business: 'Own online business' };
-const GOAL_SHORT = { job: 'Job', freelance: 'Freelance', business: 'Business' };
 const EMPTY_MODULE = { title: '', hours: 8, description: '', task: '', goals: [], needs: [], usesComputer: false, foundation: false, note: '' };
 const input = 'mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200';
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
-function ModuleRow({ module, onEdit, onMove, first, last }) {
+function ModuleRow({ module, goalLabels, onEdit, onMove, first, last }) {
   return (
     <li className="grid grid-cols-[1.75rem_minmax(0,1fr)_auto] items-center gap-3 border-t border-stone-100 px-3 py-2.5 first:border-t-0">
       <div className="flex flex-col items-center">
@@ -28,7 +26,7 @@ function ModuleRow({ module, onEdit, onMove, first, last }) {
         <p className="text-sm font-semibold text-slate-900">{module.title}<span className="ml-2 text-xs font-medium tabular-nums text-slate-400">{module.hours} h</span></p>
         {module.task && <p className="text-xs text-slate-600"><span className="text-slate-400">Pre-assessment:</span> {module.task}</p>}
         <div className="mt-1 flex flex-wrap gap-1">
-          {module.goals.map((goal) => <span key={goal} className="rounded-full bg-brand-50 px-2 text-[11px] font-semibold text-brand-600">{GOAL_SHORT[goal] || goal}</span>)}
+          {module.goals.map((goal) => <span key={goal} title={goalLabels.get(goal)} className="max-w-[14rem] truncate rounded-full bg-brand-50 px-2 text-[11px] font-semibold text-brand-600">{goalLabels.get(goal) || goal}</span>)}
           {module.hidden && <span className="rounded-full bg-amber-50 px-2 text-[11px] font-semibold text-amber-800">Hidden</span>}
           {module.learners > 0 && <span className="rounded-full bg-stone-100 px-2 text-[11px] font-semibold text-slate-600">{plural(module.learners, 'learner', 'learners')}</span>}
         </div>
@@ -38,7 +36,7 @@ function ModuleRow({ module, onEdit, onMove, first, last }) {
   );
 }
 
-function PhaseCard({ phase, modules = phase.modules, searching = false, open, onToggle, onAddModule, onEditModule, onMove, onEditPhase, onDeletePhase }) {
+function PhaseCard({ phase, modules = phase.modules, goalLabels, searching = false, open, onToggle, onAddModule, onEditModule, onMove, onEditPhase, onDeletePhase }) {
   const visible = phase.modules.filter((module) => !module.hidden);
   const hours = visible.reduce((sum, module) => sum + module.hours, 0);
   return (
@@ -64,6 +62,7 @@ function PhaseCard({ phase, modules = phase.modules, searching = false, open, on
                 <ModuleRow
                   key={module.id}
                   module={module}
+                  goalLabels={goalLabels}
                   // Moving swaps with the real neighbour, so it's off while a search hides some modules.
                   first={searching || index === 0}
                   last={searching || index === modules.length - 1}
@@ -84,7 +83,7 @@ function PhaseCard({ phase, modules = phase.modules, searching = false, open, on
 }
 
 // Add or edit a module: its details, and how it appears in the pre-assessment.
-function ModulePanel({ module, phaseNumber, phases, allModules, onClose, onSaved }) {
+function ModulePanel({ module, phaseNumber, phases, allModules, goals, onClose, onSaved }) {
   const confirm = useConfirm();
   const [form, setForm] = useState(() => ({ ...EMPTY_MODULE, phase: phaseNumber, ...(module || {}) }));
   const [error, setError] = useState('');
@@ -159,30 +158,21 @@ function ModulePanel({ module, phaseNumber, phases, allModules, onClose, onSaved
         </label>
 
         <section className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
-          <div>
-            <h3 className="text-sm font-bold text-brand-800">In the pre-assessment</h3>
-            <p className="text-xs text-slate-500">Beneficiaries rate this task Never, With help or On my own. Anything below On my own becomes a topic they learn.</p>
-          </div>
+          <h3 className="text-sm font-bold text-brand-800">In the pre-assessment</h3>
           <label className="block text-sm font-medium text-slate-700">
             Task beneficiaries rate
             <input value={form.task} onChange={(event) => update({ task: event.target.value })} maxLength={200} placeholder="e.g. Make a poster or social media graphic in Canva" className={input} />
-            <span className="mt-1 block text-xs font-normal text-slate-500">One plain sentence starting with a verb: something a person can do.</span>
           </label>
-          <div className="grid items-center gap-2 rounded-lg border border-dashed border-brand-200 bg-white p-3 sm:grid-cols-[1fr_auto]" aria-hidden="true">
-            <p className="text-sm text-slate-800">{form.task.trim() || 'Your task appears here'}</p>
-            <div className="grid grid-cols-3 gap-1">{['Never', 'With help', 'On my own'].map((label) => <span key={label} className="rounded-lg border border-stone-200 px-2 py-1 text-center text-[11px] text-slate-500">{label}</span>)}</div>
-          </div>
           <fieldset>
             <legend className="text-sm font-medium text-slate-700">Goals that need it</legend>
             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-              {Object.entries(GOAL_LABELS).map(([value, label]) => (
-                <label key={value} className="inline-flex items-center gap-2 text-sm text-slate-700">
-                  <input type="checkbox" checked={form.goals.includes(value)} onChange={() => update({ goals: toggleIn(form.goals, value) })} className="h-4 w-4 rounded border-stone-300 text-brand-600" />
-                  {label}
+              {goals.filter((goal) => goal.startPhase === null).map((goal) => (
+                <label key={goal.value} className="inline-flex items-center gap-2 text-sm text-slate-700">
+                  <input type="checkbox" checked={form.goals.includes(goal.value)} onChange={() => update({ goals: toggleIn(form.goals, goal.value) })} className="h-4 w-4 rounded border-stone-300 text-brand-600" />
+                  {goal.label}
                 </label>
               ))}
             </div>
-            <p className="mt-1 text-xs text-slate-500">Only beneficiaries with these goals are asked about it. “Not sure yet” always sees every module.</p>
           </fieldset>
           <fieldset>
             <legend className="text-sm font-medium text-slate-700">Needs first <span className="font-normal text-slate-500">(optional)</span></legend>
@@ -196,18 +186,17 @@ function ModulePanel({ module, phaseNumber, phases, allModules, onClose, onSaved
                 );
               })}
             </div>
-            <p className="mt-1 text-xs text-slate-500">It waits as “next up” while a beneficiary can’t do these yet.</p>
           </fieldset>
           <details>
             <summary className="cursor-pointer text-sm font-semibold text-brand-600">More options</summary>
             <div className="mt-3 space-y-3">
               <label className="flex items-start gap-2 text-sm text-slate-700">
                 <input type="checkbox" checked={form.usesComputer} onChange={(event) => update({ usesComputer: event.target.checked })} className="mt-0.5 h-4 w-4 rounded border-stone-300 text-brand-600" />
-                <span>Uses a computer<span className="block text-xs text-slate-500">Skipped for beneficiaries who have never used one; they start from the basics.</span></span>
+                <span>Uses a computer</span>
               </label>
               <label className="flex items-start gap-2 text-sm text-slate-700">
                 <input type="checkbox" checked={form.foundation} onChange={(event) => update({ foundation: event.target.checked })} className="mt-0.5 h-4 w-4 rounded border-stone-300 text-brand-600" />
-                <span>Recommend it even when rated “On my own”<span className="block text-xs text-slate-500">…if a module that builds only on it is rated “Never” (like Basic Computer Operation).</span></span>
+                <span>Recommend it even when rated “On my own”</span>
               </label>
               <label className="block text-sm font-medium text-slate-700">
                 Note for beneficiaries <span className="font-normal text-slate-500">(optional)</span>
@@ -291,6 +280,77 @@ function PhaseDialog({ phase, nextNumber, onClose, onSaved }) {
   );
 }
 
+// The answers to "What is your main goal in joining ELEVATE?" in the
+// pre-assessment: rename, add or remove them, then save them together.
+function GoalsDialog({ goals, phases, onClose, onSaved }) {
+  const [rows, setRows] = useState(() => goals.map((goal) => ({ ...goal, key: goal.value })));
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const onKey = (event) => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const setLabel = (key, label) => setRows((current) => current.map((row) => (row.key === key ? { ...row, label } : row)));
+  // New goals go before “Not sure yet” (it has a start phase), which stays last.
+  const addRow = () => setRows((current) => [
+    ...current.filter((row) => row.startPhase === null),
+    { key: `new-${Date.now()}`, value: null, label: '', startPhase: null },
+    ...current.filter((row) => row.startPhase !== null),
+  ]);
+
+  async function save(event) {
+    event.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      const response = await axiosClient.put('/admin/training-design/goals', { goals: rows.map(({ value, label, startPhase }) => ({ value, label, startPhase })) });
+      onSaved(response.data.message);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'Could not save the goals.');
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" role="dialog" aria-modal="true" aria-labelledby="goals-dialog-title">
+      <button type="button" tabIndex={-1} aria-label="Close" onClick={onClose} className="fade-enter absolute inset-0 cursor-default bg-slate-900/40" />
+      <form onSubmit={save} className="pop-enter relative flex max-h-[90vh] w-full max-w-lg flex-col gap-4 rounded-2xl bg-white p-6 shadow-xl">
+        <div>
+          <h2 id="goals-dialog-title" className="text-lg font-bold text-slate-900">Main goals</h2>
+          <p className="text-sm text-slate-500">The answers to “What is your main goal in joining ELEVATE?” in the pre-assessment. Each module lists the goals that need it, and beneficiaries are asked only about their goal’s modules.</p>
+        </div>
+        <ol className="space-y-2 overflow-y-auto">
+          {rows.map((row, index) => (
+            <li key={row.key} className="flex items-center gap-2">
+              <span className="w-5 shrink-0 text-right text-xs tabular-nums text-slate-400">{index + 1}</span>
+              <input value={row.label} onChange={(event) => setLabel(row.key, event.target.value)} maxLength={150} aria-label={`Goal ${index + 1}`} placeholder="e.g. Get a government job" className={input.replace("mt-1 ", "")} autoFocus={!row.value} />
+              {row.startPhase !== null
+                ? (
+                  <select value={row.startPhase} onChange={(event) => setRows((current) => current.map((item) => (item.key === row.key ? { ...item, startPhase: Number(event.target.value) } : item)))} aria-label={`What “${row.label || `goal ${index + 1}`}” is asked about`} className="w-32 shrink-0 rounded-lg border border-stone-300 px-2 py-2 text-xs text-slate-700">
+                    {phases.map((phase) => <option key={phase.number} value={phase.number}>From Phase {phase.number}</option>)}
+                    <option value={0}>All phases</option>
+                  </select>
+                )
+                : <button type="button" onClick={() => setRows((current) => current.filter((item) => item.key !== row.key))} aria-label={`Remove goal ${index + 1}`} className="w-32 shrink-0 text-left text-xs font-semibold text-red-600 hover:underline">Remove</button>}
+            </li>
+          ))}
+        </ol>
+        <button type="button" onClick={addRow} className="self-start rounded-lg border border-brand-600 bg-white px-3 py-1.5 text-sm font-semibold text-brand-700 hover:bg-brand-50">+ Add a goal</button>
+        <p className="text-xs text-slate-500">After adding a goal, tick it under “Goals that need it” in each module it needs. A goal can be removed only when no module needs it and no beneficiary chose it; you can always rename it. The last goal is for beneficiaries without a goal yet: choose the phase it starts from (they move on to the next phase once they finish it), or All phases to ask about every module.</p>
+        {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-stone-50">Cancel</button>
+          <button type="submit" disabled={saving} className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-semibold text-brand-900 hover:bg-accent-550 disabled:opacity-50">{saving ? 'Saving…' : 'Save goals'}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export default function AdminTrainingDesign() {
   const confirm = useConfirm();
   const [data, setData] = useState(null);
@@ -299,6 +359,7 @@ export default function AdminTrainingDesign() {
   const [openPhases, setOpenPhases] = useState(null);
   const [panel, setPanel] = useState(null); // { phase, moduleId | null }
   const [phaseDialog, setPhaseDialog] = useState(null); // { phase | null }
+  const [goalsOpen, setGoalsOpen] = useState(false);
   const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
@@ -316,6 +377,7 @@ export default function AdminTrainingDesign() {
   async function saved(message, openNumber) {
     setPanel(null);
     setPhaseDialog(null);
+    setGoalsOpen(false);
     setNotice(message);
     setError('');
     if (openNumber) setOpenPhases((current) => new Set([...(current || []), openNumber]));
@@ -343,6 +405,8 @@ export default function AdminTrainingDesign() {
   }
 
   const phases = data?.phases || [];
+  const goals = data?.goals || [];
+  const goalLabels = new Map(goals.map((goal) => [goal.value, goal.label]));
   const allModules = phases.flatMap((phase) => phase.modules);
   const panelModule = panel?.moduleId ? allModules.find((module) => module.id === panel.moduleId) : null;
   const nextNumber = (phases.length ? Math.max(...phases.map((phase) => phase.number)) : 0) + 1;
@@ -363,6 +427,7 @@ export default function AdminTrainingDesign() {
         meta={`The ELEVATE phases and their modules. All ${offered} visible modules are offered to beneficiaries and specialists.`}
       >
         <SearchBox value={query} onChange={setQuery} placeholder="Phase, module or task…" label="Search phases and modules" />
+        <button type="button" onClick={() => { setNotice(''); setGoalsOpen(true); }} disabled={!data} className={headerButtonClass}>Main goals</button>
         <button type="button" onClick={() => { setNotice(''); setPhaseDialog({ phase: null }); }} disabled={!data} className={headerPrimaryClass}>+ Add phase</button>
       </AdminHeader>
       {notice && <p role="status" className="mb-4 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
@@ -376,6 +441,7 @@ export default function AdminTrainingDesign() {
             key={phase.number}
             phase={phase}
             modules={modules}
+            goalLabels={goalLabels}
             searching={modules.length < phase.modules.length}
             open={Boolean(words || openPhases?.has(phase.number))}
             onToggle={() => setOpenPhases((current) => {
@@ -392,8 +458,9 @@ export default function AdminTrainingDesign() {
         ))}
       </div>
       {panel && (panel.moduleId === null || panelModule) && (
-        <ModulePanel key={`${panel.phase}:${panel.moduleId}`} module={panelModule} phaseNumber={panel.phase} phases={phases} allModules={allModules} onClose={() => setPanel(null)} onSaved={(message) => saved(message, panel.phase)} />
+        <ModulePanel key={`${panel.phase}:${panel.moduleId}`} module={panelModule} phaseNumber={panel.phase} phases={phases} allModules={allModules} goals={goals} onClose={() => setPanel(null)} onSaved={(message) => saved(message, panel.phase)} />
       )}
+      {goalsOpen && <GoalsDialog goals={goals} phases={phases} onClose={() => setGoalsOpen(false)} onSaved={saved} />}
       {phaseDialog && <PhaseDialog phase={phaseDialog.phase} nextNumber={nextNumber} onClose={() => setPhaseDialog(null)} onSaved={saved} />}
     </>
   );

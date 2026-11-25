@@ -1,7 +1,8 @@
 const { pool } = require('../config/db');
 const { logActivity } = require('../lib/activityLog');
 const { recordLearningSession } = require('../lib/learningSessions');
-const { loadTestState, loadActivityProgress, attemptDto, parseJson } = require('../lib/moduleTests');
+const { loadTestState, loadFaceToFace, attemptDto, parseJson } = require('../lib/moduleTests');
+const { announceToUsers } = require('../lib/moduleSessions');
 const { canAuthor, learnerAssignment, notify } = require('./activityController');
 
 // Pre-test and post-test for a module (tables module_test_questions and module_test_attempts).
@@ -146,8 +147,8 @@ async function takeTest(req, res) {
   if (state[kind]) return res.status(409).json({ success: false, message: `You already took the ${KIND_LABELS[kind].toLowerCase()}.` });
   if (kind === 'post') {
     if (!state.pre) return res.status(409).json({ success: false, message: 'Take the pre-test first.' });
-    const progress = await loadActivityProgress(req.user.id, assignment.id, assignment.specialist_id);
-    if (progress.done < progress.total) return res.status(409).json({ success: false, message: 'Finish all the activities first, then take the post-test.' });
+    const [faceToFace] = await loadFaceToFace({ beneficiaryId: req.user.id, moduleId: assignment.id });
+    if (!faceToFace?.postTestOpened) return res.status(409).json({ success: false, message: 'Your specialist opens the post-test after your face-to-face sessions.' });
   }
 
   const picks = req.body?.answers && typeof req.body.answers === 'object' ? req.body.answers : {};
@@ -172,7 +173,7 @@ async function takeTest(req, res) {
     throw error;
   }
   await recordLearningSession({
-    moduleId: assignment.id, beneficiaryId: req.user.id, specialistId: assignment.specialist_id, preTest: kind === 'pre', postTest: kind === 'post',
+    moduleId: assignment.id, beneficiaryId: req.user.id, specialistId: assignment.specialist_id, kind: kind === 'pre' ? 'pre_test' : 'post_test',
   });
   await logActivity({ userId: req.user.id, action: 'module_test', moduleId: assignment.id, targetUserId: assignment.specialist_id, details: `${KIND_LABELS[kind]} · ${score} of ${total}` });
   const [[me]] = await pool.query('SELECT full_name FROM users WHERE id = ?', [req.user.id]);
@@ -193,4 +194,28 @@ async function takeTest(req, res) {
   });
 }
 
-module.exports = { listQuestions, createQuestion, createQuestions, updateQuestion, deleteQuestion, takeTest };
+// Specialists: open a learner's post-test, once their face-to-face sessions
+// reach the module's training hours (lib/moduleTests.js).
+async function openPostTest(req, res) {
+  const moduleId = Number(req.params.moduleId);
+  const beneficiaryId = Number(req.params.beneficiaryId);
+  const [faceToFace] = await loadFaceToFace({ specialistId: req.user.id, beneficiaryId, moduleId });
+  if (!faceToFace) return res.status(404).json({ success: false, message: 'This learner is not in your topic.' });
+  const [[certificate]] = await pool.query('SELECT id FROM module_certificates WHERE user_id = ? AND module_id = ?', [beneficiaryId, moduleId]);
+  if (certificate) return res.status(409).json({ success: false, message: 'This topic is completed, so the tests are closed.' });
+  if (faceToFace.postTestOpened) return res.json({ success: true, message: 'The post-test is already open.' });
+  if (!faceToFace.ready) {
+    return res.status(409).json({ success: false, message: `Their face-to-face sessions come to ${faceToFace.hoursDone} of ${faceToFace.hours} hours. Open the post-test once they reach ${faceToFace.hours}.` });
+  }
+  const state = await loadTestState(beneficiaryId, moduleId, req.user.id);
+  if (!state.questions.length) return res.status(409).json({ success: false, message: 'Add your pre/post-test questions first.' });
+  await pool.query(
+    `INSERT INTO module_connections (beneficiary_id, module_id, post_test_opened_at) VALUES (?, ?, NOW())
+     ON DUPLICATE KEY UPDATE post_test_opened_at = NOW()`,
+    [beneficiaryId, moduleId]
+  );
+  await announceToUsers(req.app, [beneficiaryId], { moduleId, actorId: req.user.id, kind: 'post_test_opened', text: 'opened your post-test' });
+  res.json({ success: true, message: 'Post-test opened. They can take it now.' });
+}
+
+module.exports = { listQuestions, createQuestion, createQuestions, updateQuestion, deleteQuestion, takeTest, openPostTest };

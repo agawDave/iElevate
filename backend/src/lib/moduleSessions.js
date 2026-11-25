@@ -64,42 +64,42 @@ const NOTICE = {
   no_show: 'marked a face-to-face session as missed',
 };
 
-// A pop-up for each of these people (open sessions: posted, joined, cancelled).
-async function announceToUsers(app, userIds, { moduleId, actorId, kind, text }) {
-  const io = app.get('io');
-  if (!io || !userIds.length) return;
+// "Wed, Nov 25, 9:00 AM" in Philippine time.
+function whenText(startsAt) {
+  return new Date(startsAt).toLocaleString('en-US', { timeZone: 'Asia/Manila', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+// Kept for the notification bell (people who weren't online still see it), and
+// a pop-up for whoever is online now (open sessions: posted, joined, cancelled).
+async function announceToUsers(app, userIds, { moduleId, actorId, kind, text, startsAt }) {
+  const ids = [...new Set(userIds.map(Number))];
+  if (!ids.length) return;
   const [[details]] = await pool.query(
     'SELECT actor.full_name AS actor_name, lm.title AS module_title FROM users actor JOIN learning_modules lm ON lm.id = ? WHERE actor.id = ?',
     [moduleId, actorId]
   );
   const name = details?.actor_name || 'Someone';
-  [...new Set(userIds.map(Number))].forEach((userId) => io.to(`user:${userId}`).emit('notification:new', {
+  // "Naomi A. Bajao accepted your face-to-face session · Google Sheets · Wed, Nov 25, 9:00 AM"
+  const body = [`${name} ${text}`, details?.module_title, startsAt && whenText(startsAt)].filter(Boolean).join(' · ').slice(0, 500);
+  await pool.query('INSERT INTO notifications (user_id, body) VALUES ?', [ids.map((userId) => [userId, body])]);
+  const io = app.get('io');
+  if (!io) return;
+  ids.forEach((userId) => io.to(`user:${userId}`).emit('notification:new', {
     type: 'module_session',
     kind,
     moduleId,
     moduleTitle: details?.module_title || '',
     senderName: name,
-    body: `${name} ${text} for ${details?.module_title || 'a topic'}`,
+    body,
   }));
 }
 
-// A pop-up for the other person (the sidebar also refreshes its badges).
+// One-on-one sessions: tell the other person.
 async function announceSessionChange(app, session, actorId, kind) {
-  const io = app.get('io');
-  if (!io || !session.beneficiary_id) return;
+  if (!session.beneficiary_id) return;
   const recipientId = Number(actorId) === Number(session.beneficiary_id) ? session.specialist_id : session.beneficiary_id;
-  const [[details]] = await pool.query(
-    `SELECT actor.full_name AS actor_name, lm.title AS module_title
-     FROM users actor JOIN learning_modules lm ON lm.id = ? WHERE actor.id = ?`,
-    [session.module_id, actorId]
-  );
-  io.to(`user:${recipientId}`).emit('notification:new', {
-    type: 'module_session',
-    kind,
-    moduleId: session.module_id,
-    moduleTitle: details?.module_title || '',
-    senderName: details?.actor_name || 'Your partner',
-    body: `${details?.actor_name || 'Someone'} ${NOTICE[kind] || 'updated a session'}`,
+  await announceToUsers(app, [recipientId], {
+    moduleId: session.module_id, actorId, kind, text: NOTICE[kind] || 'updated a session', startsAt: session.starts_at,
   });
 }
 

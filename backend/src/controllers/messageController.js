@@ -1,6 +1,6 @@
 const { pool } = require('../config/db');
 const { findAccessibleConversation } = require('../lib/moduleConversationAccess');
-const { loadInbox, summarize } = require('../lib/conversationInbox');
+const { loadInbox, loadAdminChats, summarize } = require('../lib/conversationInbox');
 
 async function getMessageNotifications(req, res) {
   const [rows] = await pool.query(
@@ -201,7 +201,25 @@ async function getMessages(req, res) {
 async function getInbox(req, res) {
   const moduleId = req.query.moduleId && /^\d+$/.test(String(req.query.moduleId)) ? req.query.moduleId : null;
   const items = await loadInbox(req.user.id, { moduleId });
-  res.json({ success: true, data: { summary: summarize(items), conversations: items } });
+  const adminChats = moduleId ? [] : await loadAdminChats(req.user.id);
+  res.json({ success: true, data: { summary: summarize(items), conversations: items, adminChats } });
 }
 
-module.exports = { getMessageNotifications, getModuleConversations, getMessages, markConversationRead, getInbox };
+// Admin: the chat with one beneficiary or specialist, made the first time it's opened.
+async function openAdminChat(req, res) {
+  const [[other]] = await pool.query(
+    "SELECT id, full_name, avatar_url FROM users WHERE id = ? AND role = 'user' AND user_type IN ('beneficiary', 'specialist')",
+    [req.params.userId]
+  );
+  if (!other) return res.status(404).json({ success: false, message: 'That beneficiary or specialist was not found.' });
+  const [userA, userB] = [Number(req.user.id), Number(other.id)].sort((a, b) => a - b);
+  // shortcut: the unique key skips module_id NULL, so two opens at the same instant could make two chats (the oldest is always used); add a key if several admins chat at once.
+  const [[found]] = await pool.query(
+    'SELECT id FROM conversations WHERE module_id IS NULL AND user_a_id = ? AND user_b_id = ? ORDER BY id LIMIT 1',
+    [userA, userB]
+  );
+  const id = found ? found.id : (await pool.query('INSERT INTO conversations (user_a_id, user_b_id) VALUES (?, ?)', [userA, userB]))[0].insertId;
+  res.json({ success: true, data: { id, otherUserId: other.id, otherUserName: other.full_name, otherUserAvatar: other.avatar_url } });
+}
+
+module.exports = { getMessageNotifications, getModuleConversations, getMessages, markConversationRead, getInbox, openAdminChat };

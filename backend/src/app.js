@@ -27,6 +27,7 @@ const portfolioRoutes = require('./routes/portfolioRoutes');
 const learnerDashboardRoutes = require('./routes/learnerDashboardRoutes');
 const specialistModuleRoutes = require('./routes/specialistModuleRoutes');
 const publicRoutes = require('./routes/publicRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 
 const app = express();
@@ -66,6 +67,7 @@ app.use('/api/elevate/portfolio', portfolioRoutes);
 app.use('/api/elevate/dashboard', learnerDashboardRoutes);
 app.use('/api/elevate/my-modules', specialistModuleRoutes);
 app.use('/api/public', publicRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

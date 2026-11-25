@@ -29,8 +29,8 @@ export default function ModulesTabs() {
       value={searchParams.get('tab') || ''}
       onChange={choose}
       tabs={[
-        { value: '', label: 'Training design', count: counts.design_modules },
-        { value: 'approval', label: 'Approval', count: counts.pending_modules, alert: counts.pending_modules > 0 },
+        { value: '', label: 'Phases', count: counts.design_modules },
+        { value: 'approval', label: 'Waiting Approval', count: counts.pending_modules, alert: counts.pending_modules > 0 },
       ]}
     />
   );

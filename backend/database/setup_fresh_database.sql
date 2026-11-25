@@ -15,7 +15,7 @@
 -- To read one table at a time, see the tables\ folder (one file per table) and
 -- the data\ folder (the reference data). This file is all of them together.
 --
--- Made from the project's own database on 2026-11-22 by export_setup_sql.ps1.
+-- Made from the project's own database on 2026-11-25 by export_setup_sql.ps1.
 
 CREATE DATABASE IF NOT EXISTS `ielevate_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `ielevate_db`;
@@ -23,7 +23,7 @@ SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ============================================================================
--- Tables (31)
+-- Tables (33)
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -83,7 +83,7 @@ CREATE TABLE `career_recommendations` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
--- conversations: Chats between two people, usually a beneficiary and their specialist about a topic.
+-- conversations: Chats between two people: a beneficiary and their specialist about a topic, or the admin and a beneficiary or specialist (module_id empty).
 -- ----------------------------------------------------------------------------
 CREATE TABLE `conversations` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -120,7 +120,8 @@ CREATE TABLE `elevate_application_declines` (
 -- ----------------------------------------------------------------------------
 CREATE TABLE `elevate_learner_profiles` (
   `user_id` bigint(20) unsigned NOT NULL,
-  `goal_track` enum('job','freelance','business','undecided') NOT NULL,
+  `goal_track` varchar(30) NOT NULL,
+  `goal_other` varchar(150) DEFAULT NULL COMMENT 'The goal the beneficiary typed under "Other"; asked about like "Not sure yet" (goal_track)',
   `used_computer` tinyint(1) NOT NULL,
   `phases_completed` varchar(40) DEFAULT NULL,
   `notes` text DEFAULT NULL,
@@ -194,7 +195,7 @@ CREATE TABLE `learning_modules` (
   `title` varchar(190) NOT NULL,
   `description` varchar(500) NOT NULL,
   `task` varchar(200) DEFAULT NULL,
-  `goal_tracks` varchar(100) DEFAULT NULL,
+  `goal_tracks` varchar(500) DEFAULT NULL,
   `uses_computer` tinyint(1) NOT NULL DEFAULT 0,
   `recommend_as_foundation` tinyint(1) NOT NULL DEFAULT 0,
   `learner_note` varchar(255) DEFAULT NULL,
@@ -213,24 +214,20 @@ CREATE TABLE `learning_modules` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
--- learning_sessions: Online sessions: one per beneficiary, module and day the beneficiary worked on it online (activity answers, topic tests).
+-- learning_sessions: Online sessions: one each time a beneficiary takes a topic's pre-test or post-test or answers an activity.
 -- ----------------------------------------------------------------------------
 CREATE TABLE `learning_sessions` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `module_id` int(10) unsigned NOT NULL,
   `beneficiary_id` bigint(20) unsigned NOT NULL,
   `specialist_id` bigint(20) unsigned NOT NULL,
-  `session_date` date NOT NULL,
-  `started_at` datetime NOT NULL,
-  `ended_at` datetime NOT NULL,
-  `answers` smallint(5) unsigned NOT NULL DEFAULT 0,
-  `pre_test` tinyint(1) NOT NULL DEFAULT 0,
-  `post_test` tinyint(1) NOT NULL DEFAULT 0,
+  `kind` enum('pre_test','activity','post_test') NOT NULL,
+  `held_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_learning_session_day` (`module_id`,`beneficiary_id`,`specialist_id`,`session_date`),
-  KEY `idx_learning_session_beneficiary` (`beneficiary_id`,`session_date`),
-  KEY `idx_learning_session_specialist` (`specialist_id`,`session_date`),
-  KEY `idx_learning_session_date` (`session_date`),
+  KEY `idx_learning_session_module` (`module_id`),
+  KEY `idx_learning_session_beneficiary` (`beneficiary_id`,`held_at`),
+  KEY `idx_learning_session_specialist` (`specialist_id`,`held_at`),
+  KEY `idx_learning_session_date` (`held_at`),
   CONSTRAINT `fk_learning_session_beneficiary` FOREIGN KEY (`beneficiary_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_learning_session_module` FOREIGN KEY (`module_id`) REFERENCES `learning_modules` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_learning_session_specialist` FOREIGN KEY (`specialist_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
@@ -334,12 +331,13 @@ CREATE TABLE `module_certificates` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
--- module_connections: Topics a beneficiary has been accepted into (recorded when a specialist accepts them, so they can chat).
+-- module_connections: Topics a beneficiary has been accepted into (recorded when a specialist accepts them, so they can chat), and when the specialist opened their post-test.
 -- ----------------------------------------------------------------------------
 CREATE TABLE `module_connections` (
   `beneficiary_id` bigint(20) unsigned NOT NULL,
   `module_id` int(10) unsigned NOT NULL,
   `connected_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `post_test_opened_at` datetime DEFAULT NULL,
   PRIMARY KEY (`beneficiary_id`,`module_id`),
   KEY `fk_module_connection_module` (`module_id`),
   CONSTRAINT `fk_module_connection_beneficiary` FOREIGN KEY (`beneficiary_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
@@ -481,6 +479,20 @@ CREATE TABLE `module_test_questions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
+-- notifications: The notification bell: face-to-face session notices for each person (requested, accepted, cancelled, posted, joined), and when they read each one.
+-- ----------------------------------------------------------------------------
+CREATE TABLE `notifications` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `body` varchar(500) NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `read_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_notifications_user` (`user_id`,`id`),
+  CONSTRAINT `fk_notifications_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
 -- portfolio_items: What beneficiaries add to their portfolio: projects, awards, photos, licenses, trainings and letters.
 -- ----------------------------------------------------------------------------
 CREATE TABLE `portfolio_items` (
@@ -500,6 +512,18 @@ CREATE TABLE `portfolio_items` (
   PRIMARY KEY (`id`),
   KEY `idx_portfolio_item_owner` (`user_id`,`kind`),
   CONSTRAINT `fk_portfolio_item_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------------------------
+-- program_goals: The answers to the pre-assessment's "What is your main goal in joining ELEVATE?" question, managed by the admin; modules list the goals that need them (learning_modules.goal_tracks), and "Not sure yet" asks about the phase in start_phase (0 = all phases; normal goals leave it empty).
+-- ----------------------------------------------------------------------------
+CREATE TABLE `program_goals` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `value` varchar(30) NOT NULL,
+  `label` varchar(150) NOT NULL,
+  `start_phase` tinyint(3) unsigned DEFAULT NULL COMMENT 'Only for "Not sure yet": the phase it starts from, 0 = all phases; NULL = a normal goal',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_program_goals_value` (`value`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
@@ -765,6 +789,12 @@ INSERT INTO `program_phases` (`number`, `name`, `year`, `created_by`, `created_a
 INSERT INTO `program_phases` (`number`, `name`, `year`, `created_by`, `created_at`) VALUES (2,'Freelancing and Virtual Work',NULL,NULL,'2026-11-22 19:12:44');
 INSERT INTO `program_phases` (`number`, `name`, `year`, `created_by`, `created_at`) VALUES (3,'Digital Marketing and Entrepreneurship',NULL,NULL,'2026-11-22 19:12:44');
 INSERT INTO `program_phases` (`number`, `name`, `year`, `created_by`, `created_at`) VALUES (4,'Gaming',2026,5,'2026-11-22 20:22:02');
+
+-- program_goals: The main goals beneficiaries choose from in the pre-assessment.
+INSERT INTO `program_goals` (`id`, `value`, `label`, `start_phase`) VALUES (1,'job','Get hired for an office or BPO job',NULL);
+INSERT INTO `program_goals` (`id`, `value`, `label`, `start_phase`) VALUES (2,'freelance','Work from home as a freelancer or virtual assistant',NULL);
+INSERT INTO `program_goals` (`id`, `value`, `label`, `start_phase`) VALUES (3,'business','Start or grow my own online business',NULL);
+INSERT INTO `program_goals` (`id`, `value`, `label`, `start_phase`) VALUES (4,'undecided','Not sure yet',1);
 
 -- module_resources: The official ELEVATE program documents. Files and links people added are left out.
 INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (12,89,NULL,'pdf','Official ELEVATE Phase 3 Program Document','ELEVATE-Phase-3.pdf','elevate-phase-3.pdf','application/pdf',NULL,NULL,1,'2026-11-04 16:08:58');

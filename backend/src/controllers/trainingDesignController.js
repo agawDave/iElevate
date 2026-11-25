@@ -1,7 +1,6 @@
 const { pool } = require('../config/db');
 const { logActivity } = require('../lib/activityLog');
-const { phaseLabel, phaseNumber, parseGoals, loadPhases } = require('../lib/programPhases');
-const { GOAL_VALUES } = require('../lib/elevateSkillCheck');
+const { phaseLabel, phaseNumber, parseGoals, loadPhases, loadGoals } = require('../lib/programPhases');
 const { recomputeAssignmentsForSpecialist } = require('../services/elevateAssignmentService');
 
 // The admin (project leader) manages the ELEVATE training design by phase:
@@ -10,7 +9,8 @@ const { recomputeAssignmentsForSpecialist } = require('../services/elevateAssign
 // pre-assessment asks its task) and can be picked by specialists, who then make
 // their own module for it.
 
-const MAX = { title: 190, description: 500, task: 200, note: 255, name: 120 };
+const MAX = { title: 190, description: 500, task: 200, note: 255, name: 120, goal: 150, goals: 12 };
+const plural = (n, one, many) => `${n} ${Number(n) === 1 ? one : many}`;
 
 // Everything that ties a module (lm) to people besides learners: a specialist made a
 // module, activities, materials or test questions for it, a certificate was issued,
@@ -68,7 +68,7 @@ function readYear(value) {
 // ------------------------------------------------------------------ reading
 
 async function getTrainingDesign(req, res) {
-  const phases = await loadPhases();
+  const [phases, goals] = await Promise.all([loadPhases(), loadGoals()]);
   const [moduleRows] = await pool.query(
     `SELECT lm.id, lm.slug, lm.title, lm.phase, lm.hours, lm.description, lm.task, lm.goal_tracks, lm.uses_computer,
             lm.recommend_as_foundation, lm.learner_note, lm.is_hidden, ${LEARNERS_SQL} AS learners, ${OTHER_USE_SQL} AS other_use
@@ -97,7 +97,7 @@ async function getTrainingDesign(req, res) {
   res.json({
     success: true,
     data: {
-      goals: GOAL_VALUES,
+      goals,
       phases: phases.map((phase) => ({ ...phase, modules: modules.filter((module) => module.phase === phase.number) })),
     },
   });
@@ -160,6 +160,8 @@ async function deletePhase(req, res) {
     if (!phase) return { refuse: 404, message: 'That phase was not found.' };
     const [[used]] = await connection.query(`SELECT COUNT(*) AS n FROM learning_modules lm WHERE ${DESIGN_MODULE} AND lm.phase = ?`, [phaseLabel(number)]);
     if (Number(used.n)) return { refuse: 409, message: `Phase ${number} still has modules. Move or delete them first.` };
+    const [[goal]] = await connection.query('SELECT label FROM program_goals WHERE start_phase = ?', [number]);
+    if (goal) return { refuse: 409, message: `“${goal.label}” starts from Phase ${number}. Choose another phase for it in Main goals first.` };
     await connection.query('DELETE FROM program_phases WHERE number = ?', [number]);
     await connection.query(
       `DELETE sc FROM skill_categories sc WHERE sc.slug = ? AND NOT EXISTS (SELECT 1 FROM skills s WHERE s.category_id = sc.id)`,
@@ -188,7 +190,8 @@ async function readModule(connection, body, moduleId = null) {
   const task = typeof input.task === 'string' ? input.task.trim().replace(/\s+/g, ' ') : '';
   if (task.length < 5 || task.length > MAX.task) return { error: 'Write the task beneficiaries rate in the pre-assessment (one plain sentence).' };
   const goals = Array.isArray(input.goals) ? [...new Set(input.goals)] : [];
-  if (!goals.length || goals.some((goal) => !GOAL_VALUES.includes(goal))) return { error: 'Pick at least one goal that needs this module.' };
+  const goalValues = (await loadGoals(connection)).filter((goal) => goal.startPhase === null).map((goal) => goal.value);
+  if (!goals.length || goals.some((goal) => !goalValues.includes(goal))) return { error: 'Pick at least one goal that needs this module.' };
   const note = typeof input.note === 'string' ? input.note.trim() : '';
   if (note.length > MAX.note) return { error: `Keep the note under ${MAX.note} characters.` };
 
@@ -368,4 +371,77 @@ async function removeModule(req, res) {
   res.json({ success: true, message: `“${result.title}” deleted.` });
 }
 
-module.exports = { getTrainingDesign, addPhase, updatePhase, deletePhase, addModule, updateModule, moveModule, setModuleHidden, removeModule };
+// ------------------------------------------------------------------ main goals
+
+// The answers to "What is your main goal in joining ELEVATE?", saved together:
+// renamed, added and removed. "Not sure yet" (starts from Phase 1) always stays.
+// A goal can be removed only while no module needs it and no beneficiary chose it.
+async function saveGoals(req, res) {
+  const input = req.body?.goals;
+  if (!Array.isArray(input) || input.length > MAX.goals + 1) {
+    return res.status(400).json({ success: false, message: `Keep up to ${MAX.goals} goals besides “Not sure yet”.` });
+  }
+  const goals = input.map((goal) => ({
+    value: typeof goal?.value === 'string' ? goal.value : null,
+    label: typeof goal?.label === 'string' ? goal.label.trim().replace(/\s+/g, ' ') : '',
+    startPhase: goal?.startPhase,
+  }));
+  if (goals.some((goal) => goal.label.length < 3 || goal.label.length > MAX.goal)) {
+    return res.status(400).json({ success: false, message: `Write each goal in 3 to ${MAX.goal} characters.` });
+  }
+  if (new Set(goals.map((goal) => goal.label.toLowerCase())).size !== goals.length) {
+    return res.status(400).json({ success: false, message: 'Each goal must be different.' });
+  }
+  const result = await withTransaction(async (connection) => {
+    const [existing] = await connection.query('SELECT value, label, start_phase FROM program_goals FOR UPDATE');
+    const byValue = new Map(existing.map((row) => [row.value, row]));
+    if (goals.some((goal) => goal.value && !byValue.has(goal.value))) {
+      return { refuse: 409, message: 'The goals were changed meanwhile. Reload the page and try again.' };
+    }
+    const kept = new Set(goals.map((goal) => goal.value).filter(Boolean));
+    const undecided = existing.find((row) => row.start_phase !== null);
+    if (undecided && !kept.has(undecided.value)) return { refuse: 400, message: `“${undecided.label}” can’t be removed: it’s for beneficiaries who don’t have a goal yet.` };
+    if (!goals.some((goal) => !goal.value || byValue.get(goal.value).start_phase === null)) {
+      return { refuse: 400, message: `Keep at least one goal besides “${undecided?.label || 'Not sure yet'}”.` };
+    }
+    // "Not sure yet": the phase it starts from (locked so it can't be deleted meanwhile), or 0 = all phases.
+    const startPhase = undecided && goals.find((goal) => goal.value === undecided.value).startPhase;
+    if (undecided && startPhase !== 0) {
+      const [[phase]] = Number.isInteger(startPhase) ? await connection.query('SELECT number FROM program_phases WHERE number = ? FOR UPDATE', [startPhase]) : [[]];
+      if (!phase) return { refuse: 400, message: `Choose the phase “${undecided.label}” starts from.` };
+    }
+    for (const row of existing.filter((goal) => !kept.has(goal.value))) {
+      const [[use]] = await connection.query(
+        `SELECT (SELECT COUNT(*) FROM learning_modules lm WHERE ${DESIGN_MODULE} AND JSON_CONTAINS(lm.goal_tracks, JSON_QUOTE(?))) AS modules,
+                (SELECT COUNT(*) FROM elevate_learner_profiles WHERE goal_track = ?) AS people`,
+        [row.value, row.value]
+      );
+      const why = [
+        Number(use.modules) && `${plural(use.modules, 'module needs', 'modules need')} it (untick it in ${Number(use.modules) === 1 ? 'that module' : 'those modules'} first)`,
+        Number(use.people) && `${plural(use.people, 'beneficiary', 'beneficiaries')} chose it`,
+      ].filter(Boolean);
+      if (why.length) return { refuse: 409, message: `“${row.label}” can’t be removed: ${why.join(' and ')}. You can rename it instead.` };
+      await connection.query('DELETE FROM program_goals WHERE value = ?', [row.value]);
+    }
+    for (const goal of goals) {
+      if (goal.value) {
+        const start = byValue.get(goal.value).start_phase === null ? null : startPhase;
+        await connection.query('UPDATE program_goals SET label = ?, start_phase = ? WHERE value = ?', [goal.label, start, goal.value]);
+      } else {
+        // A short value that never changes (modules and answers keep it); the label can.
+        const base = slugify(goal.label).slice(0, 24).replace(/-+$/, '') || 'goal';
+        let value = base;
+        for (let n = 2; byValue.has(value); n += 1) value = `${base}-${n}`;
+        byValue.set(value, { value });
+        // Before "Not sure yet", which is ordered last anyway.
+        await connection.query('INSERT INTO program_goals (value, label) VALUES (?, ?)', [value, goal.label]);
+      }
+    }
+    return { ok: true };
+  });
+  if (result.refuse) return res.status(result.refuse).json({ success: false, message: result.message });
+  await logActivity({ userId: req.user.id, action: 'training_design', details: 'Edited the main goals of the pre-assessment' });
+  res.json({ success: true, message: 'Main goals saved.' });
+}
+
+module.exports = { saveGoals, getTrainingDesign, addPhase, updatePhase, deletePhase, addModule, updateModule, moveModule, setModuleHidden, removeModule };

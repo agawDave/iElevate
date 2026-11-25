@@ -15,11 +15,10 @@ export function moduleStatusOf(module) {
 // The specialist's create / edit page for their module on a topic.
 export const moduleEditorPath = (topicId) => `/teach/${topicId}`;
 
-export function contentSummary({ materials = 0, activities = 0, testQuestions = 0, hours = 0 } = {}) {
+export function contentSummary({ materials = 0, testQuestions = 0, hours = 0 } = {}) {
   return [
     hours ? `${hours} hour${hours === 1 ? '' : 's'}` : null,
     `${materials} material${materials === 1 ? '' : 's'}`,
-    `${activities} activit${activities === 1 ? 'y' : 'ies'}`,
     testQuestions ? `pre/post-test: ${testQuestions} question${testQuestions === 1 ? '' : 's'}` : 'no pre/post-test',
   ].filter(Boolean).join(' · ');
 }

@@ -5,7 +5,7 @@ import PageHeader from '../components/layout/PageHeader';
 import { useAuth } from '../context/AuthContext';
 import axiosClient from '../api/axiosClient';
 import MaterialsPanel from '../components/modules/MaterialsPanel';
-import ActivitiesPanel from '../components/modules/ActivitiesPanel';
+import TestsPanel from '../components/modules/TestsPanel';
 import LineIcon from '../components/ui/LineIcon';
 import { SkeletonLines } from '../components/ui/Skeleton';
 import { moduleStatusOf } from '../lib/moduleStatus';
@@ -18,13 +18,13 @@ function formatDate(value) {
   return value ? new Date(value).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' }) : '';
 }
 
-function CheckItem({ done, optional = false, children }) {
+function CheckItem({ done, children }) {
   return (
     <li className={`flex items-start gap-2 ${done ? 'text-slate-800' : 'text-slate-500'}`}>
       {done
         ? <LineIcon name="check" strokeWidth={2.5} className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-        : <span className={`mt-1 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${optional ? 'border-stone-300' : 'border-amber-400'}`} aria-hidden="true" />}
-      <span>{children}{optional && <span className="text-slate-400"> (optional)</span>}<span className="sr-only">{done ? ', done' : ', not yet'}</span></span>
+        : <span className="mt-1 h-3.5 w-3.5 shrink-0 rounded-full border-2 border-amber-400" aria-hidden="true" />}
+      <span>{children}<span className="sr-only">{done ? ', done' : ', not yet'}</span></span>
     </li>
   );
 }
@@ -42,7 +42,7 @@ function ContentRow({ title, detail, button, onClick }) {
 }
 
 // A specialist creates (or edits) their own module for one ELEVATE topic:
-// title, overview and hours, then materials, activities and the pre/post-test
+// title, overview and hours, then materials and the pre/post-test
 // with the same panels as the Modules page, then sends it to the admin.
 export default function SpecialistModuleEditor() {
   const { topicId } = useParams();
@@ -54,7 +54,7 @@ export default function SpecialistModuleEditor() {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [panel, setPanel] = useState(''); // 'materials' | 'activities' | 'test'
+  const [panel, setPanel] = useState(''); // 'materials' | 'test'
 
   const load = useCallback(async ({ keepForm = false } = {}) => {
     try {
@@ -98,9 +98,9 @@ export default function SpecialistModuleEditor() {
   const ready = {
     about: form.title.trim().length > 0 && form.overview.trim().length >= MIN_OVERVIEW,
     materials: counts.materials > 0,
-    activities: counts.activities > 0,
+    test: counts.testQuestions > 0,
   };
-  const canSubmit = ready.about && ready.materials && ready.activities;
+  const canSubmit = ready.about && ready.materials && ready.test;
   const canSend = ['none', 'draft', 'changes_requested'].includes(status);
   const locked = !teaches;
 
@@ -214,14 +214,8 @@ export default function SpecialistModuleEditor() {
                 onClick={() => setPanel('materials')}
               />
               <ContentRow
-                title="Activities"
-                detail={counts.activities ? `${counts.activities} added · multiple choice, written or file tasks` : 'None yet · multiple choice, written or file tasks'}
-                button="Tests & activities"
-                onClick={() => setPanel('activities')}
-              />
-              <ContentRow
                 title="Pre/post-test"
-                detail={counts.testQuestions ? `${counts.testQuestions} question${counts.testQuestions === 1 ? '' : 's'}` : 'Not added yet · optional'}
+                detail={counts.testQuestions ? `${counts.testQuestions} question${counts.testQuestions === 1 ? '' : 's'}` : 'Not added yet'}
                 button={counts.testQuestions ? 'Edit questions' : 'Add questions'}
                 onClick={() => setPanel('test')}
               />
@@ -241,8 +235,7 @@ export default function SpecialistModuleEditor() {
           <ul className="mt-3 space-y-2 text-sm">
             <CheckItem done={ready.about}>Title and overview written</CheckItem>
             <CheckItem done={ready.materials}>At least one material</CheckItem>
-            <CheckItem done={ready.activities}>At least one activity</CheckItem>
-            <CheckItem done={counts.testQuestions > 0} optional>Pre/post-test</CheckItem>
+            <CheckItem done={ready.test}>Pre/post-test questions</CheckItem>
           </ul>
           {!locked && (
             <div className="mt-5 space-y-2">
@@ -271,7 +264,7 @@ export default function SpecialistModuleEditor() {
       </div>
 
       {panel === 'materials' && <MaterialsPanel topicId={topic.id} onClose={closePanel} />}
-      {(panel === 'activities' || panel === 'test') && <ActivitiesPanel topicId={topic.id} topics={[{ id: topic.id, title: topic.title }]} start={panel} onClose={closePanel} onChanged={() => load({ keepForm: true })} />}
+      {panel === 'test' && <TestsPanel topicId={topic.id} topics={[{ id: topic.id, title: topic.title }]} onClose={closePanel} onChanged={() => load({ keepForm: true })} />}
     </AppLayout>
   );
 }

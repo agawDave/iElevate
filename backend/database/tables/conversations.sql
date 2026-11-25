@@ -1,5 +1,5 @@
 -- Table: conversations
--- Chats between two people, usually a beneficiary and their specialist about a topic.
+-- Chats between two people: a beneficiary and their specialist about a topic, or the admin and a beneficiary or specialist (module_id empty).
 --
 -- One table of the iELEVATE database (ielevate_db), structure only. To set up
 -- the database, import ..\setup_fresh_database.sql: it has every table in one file.

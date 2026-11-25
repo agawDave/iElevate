@@ -63,6 +63,15 @@ const BENEFICIARY_SORTS = {
   last_login: 'u.last_login_at IS NULL, u.last_login_at DESC, u.id DESC',
 };
 
+// Messages this person sent in their chat with the admin (?) that the admin hasn't read.
+const UNREAD_FROM_PERSON = `(SELECT COUNT(*) FROM messages m JOIN conversations c ON c.id = m.conversation_id
+  WHERE c.module_id IS NULL AND m.sender_id = u.id AND m.read_at IS NULL AND ? IN (c.user_a_id, c.user_b_id)) AS unread_messages`;
+
+// This person has written in their chat with the admin (?): the Messages tab.
+// With unread, only replies the admin hasn't read yet (the tab's dot).
+const repliedToAdmin = (unread = false) => `EXISTS (SELECT 1 FROM messages m JOIN conversations c ON c.id = m.conversation_id
+  WHERE c.module_id IS NULL AND m.sender_id = u.id AND ? IN (c.user_a_id, c.user_b_id)${unread ? ' AND m.read_at IS NULL' : ''})`;
+
 async function listBeneficiaries(req, res) {
   const pageInfo = paging(req.query);
   const where = ["u.user_type = 'beneficiary'", "u.role <> 'admin'"];
@@ -94,6 +103,9 @@ async function listBeneficiaries(req, res) {
     where.push("EXISTS (SELECT 1 FROM elevate_module_assignments t WHERE t.beneficiary_id = u.id AND t.assignment_status = 'waiting')");
   } else if (req.query.match === 'none') {
     where.push('NOT EXISTS (SELECT 1 FROM elevate_module_assignments t WHERE t.beneficiary_id = u.id)');
+  } else if (req.query.match === 'messages') {
+    where.push(repliedToAdmin());
+    params.push(req.user.id);
   }
   const whereSql = where.join(' AND ');
   const order = BENEFICIARY_SORTS[req.query.sort] || BENEFICIARY_SORTS.newest;
@@ -113,13 +125,14 @@ async function listBeneficiaries(req, res) {
              WHERE a.beneficiary_id = u.id AND a.assignment_status = 'waiting') AS topics_waiting,
             (SELECT COUNT(*) FROM elevate_module_assignments a
              WHERE a.beneficiary_id = u.id AND a.assignment_status = 'queued') AS topics_next_up,
-            (SELECT COUNT(*) FROM module_certificates mc WHERE mc.user_id = u.id) AS topics_completed
+            (SELECT COUNT(*) FROM module_certificates mc WHERE mc.user_id = u.id) AS topics_completed,
+            ${UNREAD_FROM_PERSON}
      FROM users u
      LEFT JOIN user_learning_circumstances c ON c.user_id = u.id
      WHERE ${whereSql}
      ORDER BY ${order}
      LIMIT ? OFFSET ?`,
-    [...params, pageInfo.pageSize, pageInfo.offset]
+    [req.user.id, ...params, pageInfo.pageSize, pageInfo.offset]
   );
   pageResponse(res, rows.map((row) => ({
     ...row,
@@ -128,16 +141,18 @@ async function listBeneficiaries(req, res) {
     topics_waiting: Number(row.topics_waiting),
     topics_next_up: Number(row.topics_next_up),
     topics_completed: Number(row.topics_completed),
+    unread_messages: Number(row.unread_messages),
   })), Number(total), pageInfo, {
     filters: { topics: await elevateTopics() },
     counts: await countRow(
       `SELECT COUNT(*) AS everyone,
               SUM(EXISTS (SELECT 1 FROM elevate_module_assignments t WHERE t.beneficiary_id = u.id AND t.assignment_status = 'waiting')) AS waiting,
-              SUM(NOT EXISTS (SELECT 1 FROM elevate_module_assignments t WHERE t.beneficiary_id = u.id)) AS none
+              SUM(NOT EXISTS (SELECT 1 FROM elevate_module_assignments t WHERE t.beneficiary_id = u.id)) AS none,
+              SUM(${repliedToAdmin()}) AS messages, SUM(${repliedToAdmin(true)}) AS unread
        FROM users u
        LEFT JOIN user_learning_circumstances c ON c.user_id = u.id
        WHERE ${tabWhere}`,
-      tabParams
+      [req.user.id, req.user.id, ...tabParams]
     ),
   });
 }
@@ -148,11 +163,12 @@ async function getBeneficiary(req, res) {
             u.civil_status, u.education, u.work_status, u.sector_tags, u.mobile_number, u.school_or_org,
             u.country, u.region_code, u.state_region, u.province, u.city, c.barangay,
             c.learning_modes, c.availability, c.device_access, c.internet_access,
-            p.goal_track, p.used_computer, p.notes, p.completed_at AS skill_check_at,
+            COALESCE(p.goal_other, g.label) AS goal_label, p.used_computer, p.completed_at AS skill_check_at,
             u.created_at, u.last_login_at
      FROM users u
      LEFT JOIN user_learning_circumstances c ON c.user_id = u.id
      LEFT JOIN elevate_learner_profiles p ON p.user_id = u.id
+     LEFT JOIN program_goals g ON g.value = p.goal_track
      WHERE u.id = ? AND u.user_type = 'beneficiary'`,
     [req.params.id]
   );
@@ -222,6 +238,9 @@ async function listSpecialists(req, res) {
   const tabParams = [...params];
   if (req.query.topics === 'none') {
     where.push("NOT EXISTS (SELECT 1 FROM user_skills ns WHERE ns.user_id = u.id AND ns.relation_type = 'teaches')");
+  } else if (req.query.topics === 'messages') {
+    where.push(repliedToAdmin());
+    params.push(req.user.id);
   }
   const whereSql = where.join(' AND ');
   const order = SPECIALIST_SORTS[req.query.sort] || SPECIALIST_SORTS.name;
@@ -236,26 +255,29 @@ async function listSpecialists(req, res) {
                AND lm.is_elevate_program = 1 AND lm.approval_status = 'approved'
              WHERE us.user_id = u.id AND us.relation_type = 'teaches') AS topics_taught,
             (SELECT COUNT(*) FROM elevate_module_assignments a
-             WHERE a.specialist_id = u.id AND a.assignment_status = 'assigned') AS learners
+             WHERE a.specialist_id = u.id AND a.assignment_status = 'assigned') AS learners,
+            ${UNREAD_FROM_PERSON}
      FROM users u
      WHERE ${whereSql}
      ORDER BY ${order}
      LIMIT ? OFFSET ?`,
-    [...params, pageInfo.pageSize, pageInfo.offset]
+    [req.user.id, ...params, pageInfo.pageSize, pageInfo.offset]
   );
   // Incoming / ongoing / completed, only for the specialists on this page.
   const pairs = await loadPairs({ specialistIds: rows.map((row) => row.id) });
   pageResponse(res, rows.map((row) => ({
     ...row,
     learners: Number(row.learners),
+    unread_messages: Number(row.unread_messages),
     ...countByStatus(pairs.filter((pair) => Number(pair.specialist_id) === Number(row.id))),
   })), Number(total), pageInfo, {
     filters: { topics: await elevateTopics() },
     counts: await countRow(
       `SELECT COUNT(*) AS everyone,
-              SUM(NOT EXISTS (SELECT 1 FROM user_skills ns WHERE ns.user_id = u.id AND ns.relation_type = 'teaches')) AS none
+              SUM(NOT EXISTS (SELECT 1 FROM user_skills ns WHERE ns.user_id = u.id AND ns.relation_type = 'teaches')) AS none,
+              SUM(${repliedToAdmin()}) AS messages, SUM(${repliedToAdmin(true)}) AS unread
        FROM users u WHERE ${tabWhere}`,
-      tabParams
+      [req.user.id, req.user.id, ...tabParams]
     ),
   });
 }
@@ -354,6 +376,11 @@ async function listUsers(req, res) {
   });
 }
 
+// Unread messages in this admin's (?) chats from beneficiaries or specialists.
+const UNREAD_FROM_TYPE = (type) => `(SELECT COUNT(*) FROM messages m
+  JOIN conversations c ON c.id = m.conversation_id JOIN users s ON s.id = m.sender_id
+  WHERE c.module_id IS NULL AND ? IN (c.user_a_id, c.user_b_id) AND m.read_at IS NULL AND s.user_type = '${type}')`;
+
 // Counts for the admin sidebar badges and directory headings.
 async function navCounts(req, res) {
   const [[row]] = await pool.query(
@@ -363,7 +390,10 @@ async function navCounts(req, res) {
        (SELECT COUNT(*) FROM users) AS users,
        (SELECT COUNT(*) FROM specialist_modules WHERE status = 'pending') AS pending_modules,
        (SELECT COUNT(*) FROM learning_modules WHERE is_elevate_program = 1 AND approval_status = 'approved' AND is_hidden = 0) AS design_modules,
-       (SELECT COUNT(*) FROM elevate_module_assignments WHERE assignment_status = 'waiting') AS waiting_topics`
+       (SELECT COUNT(*) FROM elevate_module_assignments WHERE assignment_status = 'waiting') AS waiting_topics,
+       ${UNREAD_FROM_TYPE('beneficiary')} AS unread_beneficiaries,
+       ${UNREAD_FROM_TYPE('specialist')} AS unread_specialists`,
+    [req.user.id, req.user.id]
   );
   res.json({ success: true, data: Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value) || 0])) });
 }

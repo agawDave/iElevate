@@ -79,7 +79,8 @@ function registerChatHandlers(io) {
         await logActivity({ userId: socket.user.id, action: 'message_sent', moduleId: conversation.module_id, targetUserId: recipientId });
         const [senders] = await pool.query('SELECT full_name FROM users WHERE id = ?', [socket.user.id]);
         io.to(`user:${recipientId}`).emit('notification:new', {
-          type: 'module_message',
+          // No topic: the admin's chat with a beneficiary or specialist.
+          type: conversation.module_id ? 'module_message' : 'admin_message',
           conversationId: conversation.id,
           moduleId: conversation.module_id,
           moduleTitle: conversation.module_title,

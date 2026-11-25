@@ -13,19 +13,10 @@ const STEPS = [
   { key: 'circumstances', label: 'Preferred setup' },
 ];
 
-const COPY = {
-  'skill-check': {
-    title: 'ELEVATE pre-assessment',
-    intro: 'One short list for everyone: tell us your goal and how well you can do a few everyday tasks. Your answers decide which ELEVATE topics you learn and which specialist teaches you. There are no wrong answers.',
-  },
-  results: {
-    title: 'Your ELEVATE topics',
-    intro: 'Anything you can’t do on your own yet is a learning topic. Topics for your main goal come first, up to four at a time; the rest are next up.',
-  },
-  circumstances: {
-    title: 'Your preferred setup',
-    intro: 'We match each topic with a specialist whose schedule, learning mode, and location fit yours, so you don’t have to choose one yourself.',
-  },
+const TITLES = {
+  'skill-check': 'ELEVATE pre-assessment',
+  results: 'Your ELEVATE topics',
+  circumstances: 'Your preferred setup',
 };
 
 // ELEVATE profiling: the pre-assessment (skill check) decides what the beneficiary
@@ -55,14 +46,11 @@ export default function LearningGoalsOnboarding() {
   }, [retake]);
 
   const stepIndex = STEPS.findIndex((item) => item.key === step);
-  const copy = COPY[step] || COPY['skill-check'];
 
   return (
     <AppLayout>
       <div className="mx-auto max-w-3xl">
-        <p className="text-xs font-semibold uppercase tracking-widest text-accent-600">ELEVATE orientation, pre-test and profiling</p>
-        <h1 className="mt-1 text-2xl font-extrabold tracking-tight">{copy.title}</h1>
-        <p className="mt-2 text-sm text-slate-600">{copy.intro}</p>
+        <h1 className="text-2xl font-extrabold tracking-tight">{TITLES[step] || TITLES['skill-check']}</h1>
 
         <ol className="mt-5 flex flex-wrap gap-3 text-xs font-medium">
           {STEPS.map((item, index) => (
@@ -81,9 +69,8 @@ export default function LearningGoalsOnboarding() {
             <SkillCheckQuestionnaire
               initialProfile={previousProfile ? {
                 goalTrack: previousProfile.goalTrack,
+                goalOther: previousProfile.goalOther,
                 usedComputer: previousProfile.usedComputer,
-                phasesCompleted: previousProfile.phasesCompleted || [],
-                notes: previousProfile.notes || '',
               } : null}
               onComplete={(data) => {
                 setResults(data.results || []);
