@@ -11,11 +11,8 @@ import { csvDate, downloadCsv } from '../../lib/csv';
 // Colors from the validated chart palette (CVD-safe; below 3:1 contrast on
 // white, so every chart keeps direct labels and a table view).
 const PARTICIPATION_SERIES = [
-  { key: 'logins', label: 'Logins', color: '#6250d6' },
-  { key: 'messages', label: 'Messages', color: '#eda100' },
-  { key: 'activities', label: 'Module answers', color: '#e87ba4' },
-  { key: 'sessions', label: 'Online sessions', color: '#2a78d6' },
-  { key: 'faceToFace', label: 'Face-to-face attended', color: '#eb6834' },
+  { key: 'users', label: 'Users', color: '#6250d6' },
+  { key: 'sessions', label: 'Sessions', color: '#2a78d6' },
   { key: 'certificates', label: 'Completed modules', color: '#1baf7a' },
 ];
 const COMPLETED_SERIES = [
@@ -43,6 +40,8 @@ const PERIOD_SERIES = [
 ];
 const TEST_LABELS = { pre: 'Pre-test', post: 'Post-test' };
 const count = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+// "8 beneficiaries · 3 specialists"
+const people = ({ beneficiaries, specialists }) => `${count(beneficiaries, 'beneficiary', 'beneficiaries')} · ${count(specialists, 'specialist')}`;
 const percent = (value) => (value === null || value === undefined ? '—' : `${value}%`);
 
 // A learner's topic in the period, in a few words: "Accepted · 3 answers · Pre-test".
@@ -58,16 +57,14 @@ function periodText(period) {
   ].filter(Boolean).join(' · ');
 }
 
-// What a beneficiary did in the period: "18 logins · 2 messages · 5 online sessions".
+const ROLE_LABELS = { beneficiary: 'Beneficiary', specialist: 'Specialist' };
+
+// What someone did in the period, as on the cards: "18 logins · 5 sessions · 1 completed module".
 function didText(row) {
   return [
     row.logins && count(row.logins, 'login'),
-    row.messages && count(row.messages, 'message'),
-    row.activities && count(row.activities, 'answer'),
-    row.sessions && count(row.sessions, 'online session'),
-    row.faceToFace && `${row.faceToFace} face-to-face`,
-    row.applications && count(row.applications, 'application'),
-    row.certificates && count(row.certificates, 'completed module'),
+    row.sessions && count(row.sessions, 'session'),
+    row.certificates && (row.role === 'specialist' ? count(row.certificates, 'certificate issued', 'certificates issued') : count(row.certificates, 'completed module')),
   ].filter(Boolean).join(' · ');
 }
 
@@ -252,7 +249,7 @@ export default function AdminReports() {
   const summary = report?.summary;
   const tests = report?.progress.tests;
   const tabCounts = report ? {
-    '': summary.activeLearners,
+    '': summary.activeLearners + summary.activeSpecialists,
     progress: report.progress.learners.length,
     tests: tests.preTaken + tests.postTaken,
     completed: summary.certificates,
@@ -316,53 +313,63 @@ export default function AdminReports() {
           <Section
             hidden={tab !== ''}
             title="Participation"
-            subtitle="How actively beneficiaries took part in this period."
+            subtitle="How actively beneficiaries and specialists took part in this period."
             actions={(
-              <CsvButton onClick={() => downloadCsv(`${fileStem}-participation.csv`, report.participation.learners, [
-                { label: 'Beneficiary', value: (row) => row.name },
+              <CsvButton onClick={() => downloadCsv(`${fileStem}-participation.csv`, report.participation.people, [
+                { label: 'Name', value: (row) => row.name },
+                { label: 'Role', value: (row) => ROLE_LABELS[row.role] },
                 { label: 'Email', value: (row) => row.email },
                 { label: 'Barangay', value: (row) => row.barangay },
                 { label: 'City', value: (row) => row.city },
                 { label: 'Sex', value: (row) => SEX_LABELS[row.sex] || '' },
                 { label: 'Age', value: (row) => row.age },
                 { label: 'Sectors', value: (row) => row.sectors.map((sector) => SECTOR_LABELS[sector] || sector).join('; ') },
+                { label: 'Main goal', value: (row) => row.goal },
                 { label: 'Logins', value: (row) => row.logins },
-                { label: 'Messages sent', value: (row) => row.messages },
-                { label: 'Module answers', value: (row) => row.activities },
-                { label: 'Online sessions', value: (row) => row.sessions },
-                { label: 'Face-to-face sessions attended', value: (row) => row.faceToFace },
-                { label: 'Applications', value: (row) => row.applications },
-                { label: 'Completed modules (certificates)', value: (row) => row.certificates },
+                { label: 'Sessions', value: (row) => row.sessions },
+                { label: 'Modules completed', value: (row) => row.certificates },
                 { label: 'Last active', value: (row) => csvDate(row.lastActiveAt) },
               ])}
               />
             )}
           >
             <Stats items={[
-              { label: 'Active beneficiaries', value: summary.activeLearners, note: `${summary.newLearners} new in this period` },
-              { label: 'Logins', value: summary.logins },
-              { label: 'Chat messages', value: summary.messages, note: 'with their specialists' },
-              { label: 'Module answers', value: summary.activitiesAnswered, note: 'tries again included' },
-              { label: 'Online sessions', value: summary.onlineSessions },
-              { label: 'Face-to-face attended', value: summary.faceToFaceAttendance },
+              {
+                label: 'Active beneficiaries and specialists',
+                value: summary.activeLearners + summary.activeSpecialists,
+                note: people({ beneficiaries: summary.activeLearners, specialists: summary.activeSpecialists }),
+              },
+              { label: 'Users', value: summary.loggedIn.beneficiaries + summary.loggedIn.specialists, note: `logged in: ${people(summary.loggedIn)}` },
+              { label: 'Modules completed', value: summary.certificates, note: people(summary.completedBy) },
+              {
+                label: 'Sessions',
+                value: summary.onlineSessions + summary.faceToFaceHeld,
+                note: `${people(summary.inSessions)} · ${summary.onlineSessions} online, ${summary.faceToFaceHeld} face-to-face`,
+              },
             ]}
             />
             <WeeklyTrendChart trend={report.participation.trend.rows} series={PARTICIPATION_SERIES} unit={report.participation.trend.unit} />
-            <p className="mt-2 text-xs text-slate-500">Logins are for beneficiaries and aren&apos;t tied to a topic, so the topic filter doesn&apos;t change them.</p>
-            <h3 className="mb-2 mt-6 text-sm font-semibold text-slate-800">Who took part ({summary.activeLearners})</h3>
+            <p className="mt-2 text-xs text-slate-500">Users are the beneficiaries and specialists who logged in. Logging in isn&apos;t tied to a topic, so the topic filter doesn&apos;t change it.</p>
+            <h3 className="mb-2 mt-6 text-sm font-semibold text-slate-800">Who took part ({summary.activeLearners + summary.activeSpecialists})</h3>
             <ReportTable
-              rows={report.participation.learners.filter((row) => row.active).map((row) => ({ ...row, key: row.id }))}
-              emptyText="No beneficiary took part in this period."
+              rows={report.participation.people.map((row) => ({ ...row, key: row.id }))}
+              emptyText="No one took part in this period."
               columns={[
-                { label: 'Beneficiary', render: (row) => <><p className="font-medium text-slate-900">{row.name}</p><p className="text-xs text-slate-500">{[row.barangay && `Brgy. ${row.barangay}`, row.city].filter(Boolean).join(', ')}</p></> },
+                { label: 'Name', render: (row) => <><p className="font-medium text-slate-900">{row.name}</p><p className="text-xs text-slate-500">{[row.barangay && `Brgy. ${row.barangay}`, row.city].filter(Boolean).join(', ')}</p></> },
+                { label: 'Role', render: (row) => ROLE_LABELS[row.role] },
+                { label: 'Main goal', render: (row) => <span className="text-slate-600">{row.goal || '—'}</span> },
                 { label: 'What they did', render: (row) => <span className="text-slate-600">{didText(row)}</span> },
                 { label: 'Last active', render: (row) => shortDate(row.lastActiveAt) },
               ]}
             />
             <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <Breakdown title="Sex" counts={report.participation.demographics.sex} labels={SEX_LABELS} />
-              <Breakdown title="Age group" counts={report.participation.demographics.age} order={AGE_ORDER} />
+              <Breakdown title="Beneficiaries by sex" counts={report.participation.demographics.sex} labels={SEX_LABELS} />
+              <Breakdown title="Beneficiaries by age group" counts={report.participation.demographics.age} order={AGE_ORDER} />
+              <div className="md:col-span-2">
+                <Breakdown title="Beneficiaries by main goal" counts={report.participation.demographics.goal} labels={{ not_given: 'No pre-assessment yet' }} />
+              </div>
             </div>
+            <p className="mt-2 text-xs text-slate-500">Goals starting with “Other:” are ones beneficiaries typed themselves. To offer one, add it with Main goals in Modules, then tick it on the modules it needs.</p>
           </Section>
 
           <Section

@@ -33,6 +33,8 @@ axiosClient.interceptors.response.use(
       } catch (refreshErr) {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
+        // Without this the landing page still sees a user and bounces back to /dashboard, looping forever.
+        localStorage.removeItem('user');
         window.location.href = '/login';
       }
     }
