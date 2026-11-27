@@ -8,7 +8,6 @@ const { offeredOrInUseSql } = require('../lib/programPhases');
 
 const MAX_PAGE_SIZE = 100;
 const USER_STATUSES = ['active', 'suspended', 'banned', 'deleted'];
-const SECTOR_TAGS = ['pwd', 'four_ps', 'indigenous', 'solo_parent', 'out_of_school_youth'];
 
 function paging(query) {
   const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
@@ -89,10 +88,6 @@ async function listBeneficiaries(req, res) {
     where.push('u.sex = ?');
     params.push(req.query.sex);
   }
-  if (SECTOR_TAGS.includes(req.query.sector)) {
-    where.push('u.sector_tags LIKE ?');
-    params.push(`%"${req.query.sector}"%`);
-  }
   if (/^\d+$/.test(String(req.query.topicId || ''))) {
     where.push('EXISTS (SELECT 1 FROM elevate_module_assignments t WHERE t.beneficiary_id = u.id AND t.module_id = ?)');
     params.push(Number(req.query.topicId));
@@ -117,7 +112,7 @@ async function listBeneficiaries(req, res) {
     params
   );
   const [rows] = await pool.query(
-    `SELECT u.id, u.full_name, u.email, u.avatar_url, u.status, u.sex, u.age, u.sector_tags,
+    `SELECT u.id, u.full_name, u.email, u.avatar_url, u.status, u.sex, u.age,
             u.city, u.province, c.barangay, u.created_at, u.last_login_at,
             (SELECT COUNT(*) FROM elevate_module_assignments a
              WHERE a.beneficiary_id = u.id AND a.assignment_status = 'assigned') AS topics_matched,
@@ -136,7 +131,6 @@ async function listBeneficiaries(req, res) {
   );
   pageResponse(res, rows.map((row) => ({
     ...row,
-    sector_tags: parseJsonList(row.sector_tags),
     topics_matched: Number(row.topics_matched),
     topics_waiting: Number(row.topics_waiting),
     topics_next_up: Number(row.topics_next_up),
@@ -160,7 +154,7 @@ async function listBeneficiaries(req, res) {
 async function getBeneficiary(req, res) {
   const [users] = await pool.query(
     `SELECT u.id, u.full_name, u.email, u.avatar_url, u.status, u.sex, u.age, DATE_FORMAT(u.birthdate, '%Y-%m-%d') AS birthdate,
-            u.civil_status, u.education, u.work_status, u.sector_tags, u.mobile_number, u.school_or_org,
+            u.civil_status, u.work_status, u.mobile_number, u.school_or_org,
             u.country, u.region_code, u.state_region, u.province, u.city, c.barangay,
             c.learning_modes, c.availability, c.device_access, c.internet_access,
             COALESCE(p.goal_other, g.label) AS goal_label, p.used_computer, p.completed_at AS skill_check_at,
@@ -191,7 +185,6 @@ async function getBeneficiary(req, res) {
     success: true,
     data: {
       ...user,
-      sector_tags: parseJsonList(user.sector_tags),
       learning_modes: parseJsonList(user.learning_modes),
       availability: parseJsonList(user.availability),
       topics: topics.map((topic) => ({

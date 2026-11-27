@@ -6,7 +6,7 @@
 # It writes:
 #   tables\<table>.sql        one file per table: what it holds, and its structure (no rows)
 #   data\<table>.sql          the reference data a new copy needs: the ELEVATE
-#                             topics, their skills and the official materials
+#                             phases, topics and their skills
 #   setup_fresh_database.sql  all of the above in one file: the one to import
 #
 # It never includes accounts or anything people entered.
@@ -36,7 +36,7 @@ $about = @{
   module_activity_answers      = "Beneficiaries' answers to the activities, with the specialist's feedback and rubric scores."
   module_certificates          = 'The certificate a specialist uploads when a beneficiary completes a topic.'
   module_connections           = 'Topics a beneficiary has been accepted into (recorded when a specialist accepts them, so they can chat).'
-  module_resources             = 'Materials for a topic: the official ELEVATE program documents, and the files and links specialists add.'
+  module_resources             = 'Materials for a topic: the files and links specialists add.'
   module_sessions              = 'Face-to-face sessions for a topic: one-on-one (a specialist and a beneficiary) or open (posted by a specialist for anyone who needs the topic), with when, where, seats and the status.'
   module_session_attendees     = 'Beneficiaries who joined an open face-to-face session, and whether they came.'
   learning_sessions            = 'Online sessions: one each time a beneficiary takes a topic''s pre-test or post-test or answers an activity.'
@@ -57,8 +57,7 @@ $about = @{
   users                        = 'Every account: beneficiaries, specialists and admins, with their profile. Passwords are stored only as hashes.'
 }
 
-# The reference data a new copy needs, in the order it's imported. Official
-# materials are the ones no person uploaded.
+# The reference data a new copy needs, in the order it's imported.
 $reference = [ordered]@{
   skill_categories = @{ about = 'The ELEVATE phases, as skill categories.' }
   skills           = @{ about = 'The skills behind the ELEVATE topics.' }
@@ -67,7 +66,6 @@ $reference = [ordered]@{
   module_prerequisites = @{ about = 'Which modules a module needs first.' }
   program_phases       = @{ about = 'The ELEVATE phases, with the year each was created.' }
   program_goals        = @{ about = 'The main goals beneficiaries choose from in the pre-assessment.' }
-  module_resources = @{ about = 'The official ELEVATE program documents. Files and links people added are left out.'; where = 'uploaded_by IS NULL' }
 }
 
 # Database settings from backend\.env (the password stays in this process only).
@@ -142,7 +140,7 @@ $header = @"
 -- iELEVATE: a fresh, empty database (structure + ELEVATE reference data)
 --
 -- What it creates: the ielevate_db database with every table, the ELEVATE
--- topics with their skills, and the official program-document entries.
+-- topics with their skills.
 -- No accounts, no learners, no personal data.
 --
 -- How to run (XAMPP): start MySQL, open phpMyAdmin (http://localhost/phpmyadmin),

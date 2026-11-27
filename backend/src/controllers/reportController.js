@@ -203,15 +203,6 @@ function ageGroup(age) {
   return '45 and over';
 }
 
-function parseList(value) {
-  try {
-    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
 function countBy(items, keyOf) {
   const counts = new Map();
   items.forEach((item) => {
@@ -303,7 +294,7 @@ async function getReport(req, res) {
   const perUser = (rows) => new Map(rows.map((row) => [Number(row.id), Number(row.n)]));
   const [people, loginsBy, messagesBy, answersBy, heldBy, faceBy, appliedBy, certificatesBy, onlineWithBy, faceHeldBy, issuedBy, lastActive] = await Promise.all([
     q(`SELECT b.id, b.user_type, b.full_name, b.email, b.sex, b.age, DATE_FORMAT(b.birthdate, '%Y-%m-%d') AS birthdate,
-              b.city, b.sector_tags, b.status, c.barangay, b.created_at, p.goal_other, g.label AS goal_label
+              b.city, b.status, c.barangay, b.created_at, p.goal_other, g.label AS goal_label
        FROM users b LEFT JOIN user_learning_circumstances c ON c.user_id = b.id
        LEFT JOIN elevate_learner_profiles p ON p.user_id = b.id
        LEFT JOIN program_goals g ON g.value = p.goal_track
@@ -370,7 +361,6 @@ async function getReport(req, res) {
       age: ageOf(row),
       barangay: row.barangay,
       city: row.city,
-      sectors: parseList(row.sector_tags),
       // The pre-assessment's main goal; one typed under "Other" shows as "Other: …",
       // so the admin can spot goals to add for a later period.
       goal: row.goal_other ? `Other: ${row.goal_other}` : row.goal_label,

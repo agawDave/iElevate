@@ -54,5 +54,4 @@ More detail on every feature: [README-STARTUP.md](README-STARTUP.md).
 ## Not in this repository
 
 Kept off GitHub on purpose (see `.gitignore`): the `.env` settings files, learners' certificates, profile
-photos, uploaded answers and module materials, and installed libraries (`node_modules`). The four official
-ELEVATE training-design PDFs are included, so the topics' materials work in every copy.
+photos, uploaded answers and module materials, and installed libraries (`node_modules`).

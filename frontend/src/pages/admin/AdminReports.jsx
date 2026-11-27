@@ -5,7 +5,7 @@ import { headerPrimaryClass } from '../../components/layout/PageHeader';
 import { AdminHeader, HeaderTabs, clearButtonClass, filterInputClass, filterLabelClass } from '../../components/admin/Directory';
 import axiosClient from '../../api/axiosClient';
 import { StackedTopicBars, WeeklyTrendChart } from '../../components/charts/PipelineCharts';
-import { BAND_LABELS, SECTOR_LABELS, SEX_LABELS } from '../../lib/profileLabels';
+import { BAND_LABELS, SEX_LABELS } from '../../lib/profileLabels';
 import { csvDate, downloadCsv } from '../../lib/csv';
 
 // Colors from the validated chart palette (CVD-safe; below 3:1 contrast on
@@ -323,7 +323,6 @@ export default function AdminReports() {
                 { label: 'City', value: (row) => row.city },
                 { label: 'Sex', value: (row) => SEX_LABELS[row.sex] || '' },
                 { label: 'Age', value: (row) => row.age },
-                { label: 'Sectors', value: (row) => row.sectors.map((sector) => SECTOR_LABELS[sector] || sector).join('; ') },
                 { label: 'Main goal', value: (row) => row.goal },
                 { label: 'Logins', value: (row) => row.logins },
                 { label: 'Sessions', value: (row) => row.sessions },
@@ -350,18 +349,25 @@ export default function AdminReports() {
             />
             <WeeklyTrendChart trend={report.participation.trend.rows} series={PARTICIPATION_SERIES} unit={report.participation.trend.unit} />
             <p className="mt-2 text-xs text-slate-500">Users are the beneficiaries and specialists who logged in. Logging in isn&apos;t tied to a topic, so the topic filter doesn&apos;t change it.</p>
-            <h3 className="mb-2 mt-6 text-sm font-semibold text-slate-800">Who took part ({summary.activeLearners + summary.activeSpecialists})</h3>
-            <ReportTable
-              rows={report.participation.people.map((row) => ({ ...row, key: row.id }))}
-              emptyText="No one took part in this period."
-              columns={[
-                { label: 'Name', render: (row) => <><p className="font-medium text-slate-900">{row.name}</p><p className="text-xs text-slate-500">{[row.barangay && `Brgy. ${row.barangay}`, row.city].filter(Boolean).join(', ')}</p></> },
-                { label: 'Role', render: (row) => ROLE_LABELS[row.role] },
-                { label: 'Main goal', render: (row) => <span className="text-slate-600">{row.goal || '—'}</span> },
-                { label: 'What they did', render: (row) => <span className="text-slate-600">{didText(row)}</span> },
-                { label: 'Last active', render: (row) => shortDate(row.lastActiveAt) },
-              ]}
-            />
+            {['beneficiary', 'specialist'].map((role) => {
+              const rows = report.participation.people.filter((row) => row.role === role);
+              return (
+                <div key={role}>
+                  <h3 className="mb-2 mt-6 text-sm font-semibold text-slate-800">{role === 'beneficiary' ? 'Beneficiaries' : 'Specialists'} who took part ({rows.length})</h3>
+                  <ReportTable
+                    rows={rows.map((row) => ({ ...row, key: row.id }))}
+                    emptyText={`No ${role} took part in this period.`}
+                    columns={[
+                      { label: 'Name', render: (row) => <><p className="font-medium text-slate-900">{row.name}</p><p className="text-xs text-slate-500">{[row.barangay && `Brgy. ${row.barangay}`, row.city].filter(Boolean).join(', ')}</p></> },
+                      // The pre-assessment's main goal is only asked of beneficiaries.
+                      role === 'beneficiary' && { label: 'Main goal', render: (row) => <span className="text-slate-600">{row.goal || '—'}</span> },
+                      { label: 'What they did', render: (row) => <span className="text-slate-600">{didText(row)}</span> },
+                      { label: 'Last active', render: (row) => shortDate(row.lastActiveAt) },
+                    ].filter(Boolean)}
+                  />
+                </div>
+              );
+            })}
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <Breakdown title="Beneficiaries by sex" counts={report.participation.demographics.sex} labels={SEX_LABELS} />
               <Breakdown title="Beneficiaries by age group" counts={report.participation.demographics.age} order={AGE_ORDER} />

@@ -3,8 +3,7 @@ import EmptyState from '../ui/EmptyState';
 const RESOURCE_LABEL = { link: 'External link', video: 'Video', pdf: 'PDF', docx: 'Word document', excel: 'Excel spreadsheet' };
 const OPEN_LABEL = { video: 'Open video', pdf: 'Open PDF', docx: 'Download Word file', excel: 'Download Excel file' };
 
-// A topic's materials: the official program document plus any the
-// specialist added. A specialist can remove the ones they added.
+// A topic's materials, added by the specialist, who can remove them.
 export default function MaterialsList({ resources, onRemove, error }) {
   if (!resources?.length) {
     return <div className="rounded-xl border border-stone-200 bg-white"><EmptyState icon="doc" compact title="No materials for this topic yet" /></div>;
@@ -22,7 +21,7 @@ export default function MaterialsList({ resources, onRemove, error }) {
                   {resource.fileName ? ` · ${resource.fileName}` : ''}
                   {resource.uploadedByMe
                     ? ' · Added by you'
-                    : !resource.official && resource.uploaderName ? ` · From your specialist, ${resource.uploaderName}` : ''}
+                    : resource.uploaderName ? ` · From your specialist, ${resource.uploaderName}` : ''}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">

@@ -6,7 +6,6 @@ import {
   BAND_LABELS,
   BAND_STYLES,
   DEVICE_LABELS,
-  EDUCATION_LABELS,
   INTERNET_LABELS,
   SEX_LABELS,
   WORK_LABELS,
@@ -121,7 +120,6 @@ export default function LearnerProfilePanel({ beneficiaryId, onClose }) {
             <dl>
               <DetailRow label="Age">{data.age ? `${data.age}` : null}</DetailRow>
               <DetailRow label="Sex">{SEX_LABELS[data.sex]}</DetailRow>
-              <DetailRow label="Education">{EDUCATION_LABELS[data.education]}</DetailRow>
               <DetailRow label="Work">{WORK_LABELS[data.workStatus]}</DetailRow>
               <DetailRow label="School / organization">{data.schoolOrOrg}</DetailRow>
               <DetailRow label="Address">{place}</DetailRow>

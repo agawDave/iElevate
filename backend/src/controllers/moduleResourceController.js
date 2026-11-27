@@ -12,13 +12,13 @@ const {
 const MAX_MATERIALS_PER_SPECIALIST = 30;
 
 // `resource` is a module_resources row joined with its learning module.
-// Official resources (uploaded_by NULL) follow the topic's access rules; a
-// specialist's own material is visible only to them and their matched learners.
+// An ELEVATE topic's materials come from specialists: each one is visible only
+// to the specialist who added it and the beneficiaries matched to them.
 async function isResourceVisible(resource, user) {
   const module = { ...resource, id: resource.module_id };
   const uploaderId = resource.uploaded_by ? Number(resource.uploaded_by) : null;
-  if (module.is_elevate_program && uploaderId) {
-    if (module.approval_status !== 'approved') return false;
+  if (module.is_elevate_program) {
+    if (!uploaderId || module.approval_status !== 'approved') return false;
     if (user.user_type === 'specialist') return uploaderId === Number(user.id);
     if (user.user_type !== 'beneficiary') return false;
     const [assignments] = await pool.query(
@@ -27,26 +27,6 @@ async function isResourceVisible(resource, user) {
       [module.id, user.id, uploaderId]
     );
     return assignments.length > 0;
-  }
-  if (module.is_elevate_program) {
-    if (!['beneficiary', 'specialist'].includes(user.user_type)) return false;
-    const [assignments] = user.user_type === 'beneficiary'
-      ? await pool.query(
-        `SELECT 1 FROM elevate_module_assignments
-         WHERE module_id = ? AND beneficiary_id = ?`,
-        [module.id, user.id]
-      )
-      : await pool.query(
-        `SELECT 1 FROM elevate_module_assignments
-         WHERE module_id = ? AND specialist_id = ? AND assignment_status = 'assigned'
-         UNION ALL
-         SELECT 1 FROM module_skills ms
-         JOIN user_skills us ON us.skill_id = ms.skill_id
-           AND us.relation_type = 'teaches' AND us.user_id = ?
-         WHERE ms.module_id = ? AND ms.is_primary = 1`,
-        [module.id, user.id, user.id, module.id]
-      );
-    return module.approval_status === 'approved' && assignments.length > 0;
   }
   return module.approval_status === 'approved'
     || (String(module.owner_id) === String(user.id) && user.user_type === 'specialist');

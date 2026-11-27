@@ -5,8 +5,6 @@ backend/certificates/
 backend/uploads/
 backend/activity-files/
 backend/module-resources/*
-# …except the four official ELEVATE training-design PDFs, which every copy of the app needs
-!backend/module-resources/elevate-phase-*.pdf
 # Python helper environment, not needed to run the app
 .venv/
 # Stray test file in the project root

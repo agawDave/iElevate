@@ -1,5 +1,5 @@
 -- Table: module_resources
--- Materials for a topic: the official ELEVATE program documents, and the files and links specialists add.
+-- Materials for a topic: the files and links specialists add.
 --
 -- One table of the iELEVATE database (ielevate_db), structure only. To set up
 -- the database, import ..\setup_fresh_database.sql: it has every table in one file.

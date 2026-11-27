@@ -5,7 +5,6 @@ import PageHeader, { headerButtonClass } from '../components/layout/PageHeader';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
 import PlaceFields, { placeError, placeFromProfile, placeHasData, placePayload } from '../components/PlaceFields';
-import SelectAllControls from '../components/SelectAllControls';
 import LineIcon from '../components/ui/LineIcon';
 
 // Profile = who the person is (demographic and contact data). Everything used
@@ -36,24 +35,6 @@ const CIVIL_STATUS_OPTIONS = [
   { value: 'separated', label: 'Separated' },
 ];
 
-const EDUCATION_OPTIONS = [
-  { value: 'elementary', label: 'Elementary' },
-  { value: 'high_school', label: 'High school' },
-  { value: 'senior_high', label: 'Senior high school' },
-  { value: 'vocational', label: 'Vocational / TESDA' },
-  { value: 'college_level', label: 'College level' },
-  { value: 'college_graduate', label: 'College graduate' },
-  { value: 'postgraduate', label: 'Postgraduate' },
-];
-
-const SECTOR_OPTIONS = [
-  { value: 'pwd', label: 'Person with disability (PWD)' },
-  { value: 'four_ps', label: '4Ps beneficiary' },
-  { value: 'indigenous', label: 'Indigenous people (IP)' },
-  { value: 'solo_parent', label: 'Solo parent' },
-  { value: 'out_of_school_youth', label: 'Out-of-school youth' },
-];
-
 function ageFromBirthdate(birthdate) {
   if (!birthdate) return null;
   const born = new Date(`${birthdate}T00:00:00`);
@@ -76,8 +57,6 @@ function formFrom(data) {
     sex: data?.sex || '',
     birthdate: data?.birthdate || '',
     civilStatus: data?.civil_status || '',
-    education: data?.education || '',
-    sectorTags: data?.sector_tags || [],
     place: placeFromProfile(data),
     workStatus: data?.work_status || '',
     mobileNumber: data?.mobile_number || '',
@@ -187,8 +166,6 @@ export default function Profile() {
       formData.append('sex', form.sex);
       formData.append('birthdate', form.birthdate);
       formData.append('civilStatus', form.civilStatus);
-      formData.append('education', form.education);
-      formData.append('sectorTags', JSON.stringify(form.sectorTags));
       formData.append('workStatus', form.workStatus);
       if (placeHasData(form.place)) {
         Object.entries(placePayload(form.place)).forEach(([key, value]) => formData.append(key, value));
@@ -213,7 +190,6 @@ export default function Profile() {
     ['Sex', Boolean(form.sex)],
     ['Birthdate', Boolean(form.birthdate)],
     ['Civil status', Boolean(form.civilStatus)],
-    ['Education', Boolean(form.education)],
     ['Current work', Boolean(form.workStatus)],
     ['Mobile number', Boolean(form.mobileNumber.trim())],
     ['Address', placeHasData(form.place)],
@@ -293,12 +269,6 @@ export default function Profile() {
                     {CIVIL_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </Field>
-                <Field label="Highest education" htmlFor="profile-education">
-                  <select id="profile-education" value={form.education} onChange={(e) => update({ education: e.target.value })} className={inputClass}>
-                    <option value="">Choose…</option>
-                    {EDUCATION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                </Field>
                 <Field label="Current work" htmlFor="profile-work">
                   <select id="profile-work" value={form.workStatus} onChange={(e) => update({ workStatus: e.target.value })} className={inputClass}>
                     <option value="">Choose…</option>
@@ -306,35 +276,6 @@ export default function Profile() {
                   </select>
                 </Field>
               </div>
-
-              <fieldset className="mt-6">
-                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                  <legend className="text-sm font-semibold text-slate-800">Do any of these apply to you? <span className="font-normal text-slate-500">(optional)</span></legend>
-                  <SelectAllControls
-                    label="sectors"
-                    onCheckAll={() => update({ sectorTags: SECTOR_OPTIONS.map((option) => option.value) })}
-                    onClear={() => update({ sectorTags: [] })}
-                    allChecked={form.sectorTags.length === SECTOR_OPTIONS.length}
-                    noneChecked={!form.sectorTags.length}
-                  />
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {SECTOR_OPTIONS.map((option) => {
-                    const checked = form.sectorTags.includes(option.value);
-                    return (
-                      <label key={option.value} className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm transition ${checked ? 'border-brand-300 bg-brand-50' : 'border-stone-200 hover:bg-stone-50'}`}>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => update({ sectorTags: checked ? form.sectorTags.filter((tag) => tag !== option.value) : [...form.sectorTags, option.value] })}
-                          className="h-4 w-4 rounded"
-                        />
-                        {option.label}
-                      </label>
-                    );
-                  })}
-                </div>
-              </fieldset>
             </Card>
 
             <Card

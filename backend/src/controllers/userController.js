@@ -16,18 +16,7 @@ const { PH_REGION_CODES, PHILIPPINES, findProvince, findCity, findBarangay, live
 const SEX_VALUES = ['female', 'male', 'prefer_not_to_say'];
 const WORK_STATUS_VALUES = ['unemployed', 'employed', 'self_employed', 'student'];
 const CIVIL_STATUS_VALUES = ['single', 'married', 'widowed', 'separated'];
-const EDUCATION_VALUES = ['elementary', 'high_school', 'senior_high', 'vocational', 'college_level', 'college_graduate', 'postgraduate'];
-const SECTOR_TAG_VALUES = ['pwd', 'four_ps', 'indigenous', 'solo_parent', 'out_of_school_youth'];
 const MAX_PLACE_LENGTH = 100;
-
-function parseJsonArray(value) {
-  try {
-    const parsed = JSON.parse(value || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
 
 function ageFrom(birthdate) {
   const born = new Date(`${birthdate}T00:00:00`);
@@ -44,7 +33,7 @@ async function getMyProfile(req, res) {
   const [rows] = await pool.query(
     `SELECT u.id, u.full_name, u.email, u.avatar_url, u.bio, u.school_or_org, u.wallet_address,
             u.user_type, u.created_at, u.sex, u.age, DATE_FORMAT(u.birthdate, '%Y-%m-%d') AS birthdate,
-            u.work_status, u.civil_status, u.education, u.sector_tags, u.mobile_number,
+            u.work_status, u.civil_status, u.mobile_number,
             u.country, u.region_code, u.state_region, u.province, u.city, c.barangay
      FROM users u
      LEFT JOIN user_learning_circumstances c ON c.user_id = u.id
@@ -52,7 +41,7 @@ async function getMyProfile(req, res) {
     [req.user.id]
   );
   const row = rows[0];
-  res.json({ success: true, data: row ? { ...row, sector_tags: parseJsonArray(row.sector_tags) } : row });
+  res.json({ success: true, data: row });
 }
 
 // Country, then for the Philippines a PSGC region, province, city and
@@ -152,17 +141,6 @@ function readProfileFields(body) {
     const value = text('civilStatus') || null;
     if (value !== null && !CIVIL_STATUS_VALUES.includes(value)) return { error: 'Choose a valid civil status.' };
     fields.civil_status = value;
-  }
-  if (has('education')) {
-    const value = text('education') || null;
-    if (value !== null && !EDUCATION_VALUES.includes(value)) return { error: 'Choose a valid education level.' };
-    fields.education = value;
-  }
-  if (has('sectorTags')) {
-    const raw = body.sectorTags;
-    const value = Array.isArray(raw) ? raw : parseJsonArray(raw);
-    if (value.some((tag) => !SECTOR_TAG_VALUES.includes(tag))) return { error: 'Choose valid sector tags.' };
-    fields.sector_tags = value.length ? JSON.stringify(SECTOR_TAG_VALUES.filter((tag) => value.includes(tag))) : null;
   }
   if (has('mobileNumber')) {
     const value = text('mobileNumber') || null;

@@ -10,16 +10,6 @@ export const WORK_LABELS = {
   student: 'Student',
 };
 
-export const EDUCATION_LABELS = {
-  elementary: 'Elementary',
-  high_school: 'High school',
-  senior_high: 'Senior high school',
-  vocational: 'Vocational / TESDA',
-  college_level: 'College level',
-  college_graduate: 'College graduate',
-  postgraduate: 'Postgraduate',
-};
-
 export const BAND_LABELS = { beginner: 'Beginner', developing: 'Developing', proficient: 'Proficient', strong: 'Strong' };
 
 export const BAND_STYLES = {
@@ -27,15 +17,6 @@ export const BAND_STYLES = {
   developing: 'bg-sky-50 text-sky-800',
   proficient: 'bg-emerald-50 text-emerald-800',
   strong: 'bg-emerald-100 text-emerald-900',
-};
-
-export const SECTOR_LABELS = {
-  pwd: 'Person with disability (PWD)',
-  four_ps: '4Ps beneficiary',
-  indigenous: 'Indigenous people (IP)',
-  solo_parent: 'Solo parent',
-  out_of_school_youth: 'Out-of-school youth',
-  none: 'None of these',
 };
 
 export const DEVICE_LABELS ={ computer: 'Own computer or laptop', smartphone: 'Smartphone only', none: 'No device' };

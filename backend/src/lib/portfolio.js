@@ -11,7 +11,7 @@ const attempt = (row) => (row ? { score: Number(row.score), total: Number(row.to
 async function buildPortfolio(beneficiaryId) {
   const [[person]] = await pool.query(
     `SELECT u.id, u.full_name, u.user_type, u.role, u.city, u.province, u.state_region, u.created_at,
-            u.avatar_url, u.bio, u.school_or_org, u.education, u.email, u.mobile_number, c.barangay, COALESCE(p.goal_other, g.label) AS goal_label
+            u.avatar_url, u.bio, u.school_or_org, u.email, u.mobile_number, c.barangay, COALESCE(p.goal_other, g.label) AS goal_label
      FROM users u
      LEFT JOIN user_learning_circumstances c ON c.user_id = u.id
      LEFT JOIN elevate_learner_profiles p ON p.user_id = u.id
@@ -208,7 +208,6 @@ async function buildPortfolio(beneficiaryId) {
       avatarUrl: person.avatar_url || null,
       bio: person.bio || '',
       schoolOrOrg: person.school_or_org || '',
-      education: person.education || null,
       goalLabel: person.goal_label || null,
     },
     items: ownItems.map((item) => ({

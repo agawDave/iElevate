@@ -13,8 +13,8 @@ function ageOf(birthdate, storedAge) {
 
 // A beneficiary's information for a specialist they applied to or learn with:
 // what the specialist needs to decide and to teach. Contact details appear
-// once the specialist has accepted them; civil status and sector tags (PWD,
-// 4Ps, …) stay with the admin.
+// once the specialist has accepted them; civil status stays
+// with the admin.
 async function getLearnerForSpecialist(req, res) {
   const beneficiaryId = Number(req.params.beneficiaryId);
   const [withYou] = await pool.query(
@@ -32,7 +32,7 @@ async function getLearnerForSpecialist(req, res) {
   }
   const [users] = await pool.query(
     `SELECT u.id, u.full_name, u.avatar_url, u.bio, u.sex, u.age, DATE_FORMAT(u.birthdate, '%Y-%m-%d') AS birthdate,
-            u.education, u.work_status, u.school_or_org, u.mobile_number, u.email,
+            u.work_status, u.school_or_org, u.mobile_number, u.email,
             u.country, u.province, u.state_region, u.city, c.barangay,
             c.learning_modes, c.availability, c.device_access, c.internet_access,
             COALESCE(p.goal_other, g.label) AS goal_label, p.used_computer, p.completed_at AS skill_check_at
@@ -69,7 +69,6 @@ async function getLearnerForSpecialist(req, res) {
       bio: user.bio || '',
       age: ageOf(user.birthdate, user.age),
       sex: user.sex,
-      education: user.education,
       workStatus: user.work_status,
       schoolOrOrg: user.school_or_org,
       place: {

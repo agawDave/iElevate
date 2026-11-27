@@ -26,10 +26,8 @@ import {
   useDirectory,
 } from '../../components/admin/Directory';
 
-const SECTOR_LABELS = { pwd: 'PWD', four_ps: '4Ps', indigenous: 'IP', solo_parent: 'Solo parent', out_of_school_youth: 'Out-of-school youth' };
 const SEX_LABELS = { female: 'Female', male: 'Male', prefer_not_to_say: 'Prefer not to say' };
 const CIVIL_LABELS = { single: 'Single', married: 'Married', widowed: 'Widowed', separated: 'Separated' };
-const EDUCATION_LABELS = { elementary: 'Elementary', high_school: 'High school', senior_high: 'Senior high school', vocational: 'Vocational / TESDA', college_level: 'College level', college_graduate: 'College graduate', postgraduate: 'Postgraduate' };
 const WORK_LABELS = { unemployed: 'Unemployed', employed: 'Employed', self_employed: 'Self-employed', student: 'Student' };
 const PROGRESS_LABELS = { incoming: 'Incoming', ongoing: 'Ongoing', completed: 'Completed' };
 const ASSIGNMENT_LABELS = { suggested: 'Not applied yet', waiting: 'Waiting for a specialist', queued: 'Next up' };
@@ -67,9 +65,7 @@ function BeneficiaryDetail({ id, onChat }) {
           <DetailRow label="Sex">{SEX_LABELS[data.sex]}</DetailRow>
           <DetailRow label="Birthdate / age">{data.birthdate ? `${formatDate(data.birthdate)} (${data.age})` : data.age}</DetailRow>
           <DetailRow label="Civil status">{CIVIL_LABELS[data.civil_status]}</DetailRow>
-          <DetailRow label="Education">{EDUCATION_LABELS[data.education]}</DetailRow>
           <DetailRow label="Work">{WORK_LABELS[data.work_status]}</DetailRow>
-          <DetailRow label="Sectors">{data.sector_tags.map((tag) => SECTOR_LABELS[tag]).join(', ')}</DetailRow>
           <DetailRow label="Mobile">{data.mobile_number}</DetailRow>
           <DetailRow label="Address">{placeOf(data)}</DetailRow>
           <DetailRow label="Joined">{formatDate(data.created_at)}</DetailRow>
@@ -129,7 +125,7 @@ export default function AdminBeneficiaries() {
   const topics = extra.filters?.topics || [];
   const counts = extra.counts || {};
   const filtered = Object.keys(params).some((key) => !['sort', 'page', 'match'].includes(key));
-  const moreActive = ['topicId', 'sex', 'sector'].filter((key) => params[key]).length;
+  const moreActive = ['topicId', 'sex'].filter((key) => params[key]).length;
 
   const columns = [
     { key: 'name', label: 'Beneficiary', render: (row) => <div className="flex items-center gap-2"><PersonCell name={row.full_name} detail={row.email} status={row.status} avatar={row.avatar_url} />{row.unread_messages > 0 && <span className="shrink-0 rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">{row.unread_messages}<span className="sr-only"> unread messages</span></span>}</div> },
@@ -165,7 +161,6 @@ export default function AdminBeneficiaries() {
         <MoreFilters active={moreActive}>
           <FilterSelect label="Topic" value={params.topicId} onChange={(value) => setParam('topicId', value)} options={[{ value: '', label: 'Any topic' }, ...topics.map((topic) => ({ value: String(topic.id), label: topic.title }))]} />
           <FilterSelect label="Sex" value={params.sex} onChange={(value) => setParam('sex', value)} options={[{ value: '', label: 'Any' }, ...Object.entries(SEX_LABELS).map(([value, label]) => ({ value, label }))]} />
-          <FilterSelect label="Sector" value={params.sector} onChange={(value) => setParam('sector', value)} options={[{ value: '', label: 'Any' }, ...Object.entries(SECTOR_LABELS).map(([value, label]) => ({ value, label }))]} />
         </MoreFilters>
         {filtered && <button type="button" onClick={() => clearAll(['match'])} className={clearButtonClass}>Clear filters</button>}
       </AdminHeader>

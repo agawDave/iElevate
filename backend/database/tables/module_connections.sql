@@ -1,5 +1,5 @@
 -- Table: module_connections
--- Topics a beneficiary has been accepted into (recorded when a specialist accepts them, so they can chat), and when the specialist opened their post-test.
+-- Topics a beneficiary has been accepted into (recorded when a specialist accepts them, so they can chat).
 --
 -- One table of the iELEVATE database (ielevate_db), structure only. To set up
 -- the database, import ..\setup_fresh_database.sql: it has every table in one file.

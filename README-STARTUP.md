@@ -98,7 +98,7 @@ specialist was chosen.
 ### Setup
 
 The whole database is built by one file, `backend/database/setup_fresh_database.sql`
-(every table, the ELEVATE topics and skills, the official materials; no accounts).
+(every table, the ELEVATE phases, topics and skills; no accounts).
 Import it in phpMyAdmin, as described in "Getting started" in `README.md`.
 
 To read the database one table at a time, open `backend/database/tables/` (one file
@@ -123,15 +123,9 @@ ELEVATE reference data). The setup file is all of them together, so import only 
   also needs a one-line description in the script's `$about` list (it warns you).
   The script copies structure and ELEVATE reference data only, never accounts.
 
-Topic modules link to these protected files in `backend/module-resources/`:
-
-- `elevate-phase-1.pdf` (Phase 1 topics)
-- `elevate-phase-2.pdf` (Phase 2 topics)
-- `elevate-phase-3.pdf` and `elevate-phase-4.pdf` (Phase 3 topics)
-
-Beneficiaries can open the materials for topics they chose. Specialists can open the
-materials for topics they teach. Only a matched beneficiary and specialist share the
-private module discussion and can book a learning session.
+A topic's materials come only from its specialists (see below); iELEVATE adds none of
+its own. Only a matched beneficiary and specialist share the private module discussion
+and can book a learning session.
 
 ### Specialist materials
 
@@ -143,7 +137,7 @@ video (MP4, WebM, MOV, OGG) files and add links:
   random names in `backend/module-resources/`.
 - Materials go live right away, but only for that specialist and the beneficiaries
   matched to them on that topic. Another specialist's learners for the same topic don't
-  see them. The official program PDF stays visible to everyone in the topic.
+  see them.
 - The specialist who uploaded a material can remove it, which also deletes the file.
 
 ### Modules page: apply, accept, learn, complete
@@ -181,12 +175,12 @@ other tabs list learners, grouped by topic.
 - **Profile** (or the learner's name, or the button in the chat) opens the beneficiary's
   information. A specialist can only open it for people who applied to them or learn
   with them. It shows:
-  - their profile basics: age, sex, education, work, school, address and about;
+  - their profile basics: age, sex, work, school, address and about;
   - their skill-check results per topic, goal, note, learning modes, weekly schedule,
     and device and internet;
   - their mobile number and email, once the specialist accepts them.
 
-  Civil status and sector tags stay admin-only.
+  Civil status stays admin-only.
 
 **Chat** opens in a side panel from a card. Its header has:
 
@@ -303,7 +297,7 @@ replaces the old Credentials page, and `/credentials` redirects to it. It opens 
 **cover** (photo, name, program, school or organization) and a **contents** list that
 jumps to each numbered section:
 
-1. **About Me:** photo, bio, school or organization, education, goal and address, from
+1. **About Me:** photo, bio, school or organization, goal and address, from
    their Profile and skill check, plus topics completed and in progress, certificates,
    and training hours completed. ELEVATE has no grade or section, so those don't appear.
 2. **Skill profile:** each topic's level from the ELEVATE skill check. If they retook it,
@@ -389,11 +383,11 @@ Each entry says who did it, when, on which topic, and with whom.
 
 **Reports** (`/admin/reports`) cover a period: the last 7 or 30 days, this or last
 month, the last 3 months, this year, or custom dates (up to 3 years). You can narrow
-them by phase, topic, city, sex and sector. Every chart has a table view.
+them by phase, topic, city and sex. Every chart has a table view.
 
 - **Participation:** logins, chat messages and activity answers over time. "Who took
-  part" (active and all beneficiaries, by sex, age group and sector), and a row per
-  beneficiary. A beneficiary is active if they logged in, sent a message, answered an
+  part" (active and all beneficiaries, by sex, age group and main goal), and a row per
+  person, in separate tables for beneficiaries and specialists. A beneficiary is active if they logged in, sent a message, answered an
   activity, attended a session, applied or got a certificate in the period. With a
   topic filter, logins don't count, since they aren't tied to a topic.
 - **Progress:** where every beneficiary stands *today* on each topic, whatever the

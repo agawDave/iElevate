@@ -1,7 +1,7 @@
 -- iELEVATE: a fresh, empty database (structure + ELEVATE reference data)
 --
 -- What it creates: the ielevate_db database with every table, the ELEVATE
--- topics with their skills, and the official program-document entries.
+-- topics with their skills.
 -- No accounts, no learners, no personal data.
 --
 -- How to run (XAMPP): start MySQL, open phpMyAdmin (http://localhost/phpmyadmin),
@@ -15,7 +15,7 @@
 -- To read one table at a time, see the tables\ folder (one file per table) and
 -- the data\ folder (the reference data). This file is all of them together.
 --
--- Made from the project's own database on 2026-11-25 by export_setup_sql.ps1.
+-- Made from the project's own database on 2026-11-27 by export_setup_sql.ps1.
 
 CREATE DATABASE IF NOT EXISTS `ielevate_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `ielevate_db`;
@@ -331,7 +331,7 @@ CREATE TABLE `module_certificates` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
--- module_connections: Topics a beneficiary has been accepted into (recorded when a specialist accepts them, so they can chat), and when the specialist opened their post-test.
+-- module_connections: Topics a beneficiary has been accepted into (recorded when a specialist accepts them, so they can chat).
 -- ----------------------------------------------------------------------------
 CREATE TABLE `module_connections` (
   `beneficiary_id` bigint(20) unsigned NOT NULL,
@@ -357,7 +357,7 @@ CREATE TABLE `module_prerequisites` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------
--- module_resources: Materials for a topic: the official ELEVATE program documents, and the files and links specialists add.
+-- module_resources: Materials for a topic: the files and links specialists add.
 -- ----------------------------------------------------------------------------
 CREATE TABLE `module_resources` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -715,7 +715,7 @@ CREATE TABLE `users` (
 INSERT INTO `skill_categories` (`id`, `parent_id`, `name`, `slug`, `created_at`) VALUES (12,NULL,'ELEVATE Phase 1: Job Readiness','elevate-phase-1-topics','2026-11-04 16:46:12');
 INSERT INTO `skill_categories` (`id`, `parent_id`, `name`, `slug`, `created_at`) VALUES (13,NULL,'ELEVATE Phase 2: Freelancing and Virtual Work','elevate-phase-2-topics','2026-11-04 16:46:12');
 INSERT INTO `skill_categories` (`id`, `parent_id`, `name`, `slug`, `created_at`) VALUES (16,NULL,'ELEVATE Phase 3: Digital Marketing and Entrepreneurship','elevate-phase-3-topics','2026-11-04 17:24:14');
-INSERT INTO `skill_categories` (`id`, `parent_id`, `name`, `slug`, `created_at`) VALUES (21,NULL,'ELEVATE Phase 4: Gaming','elevate-phase-4-topics','2026-11-22 20:22:02');
+INSERT INTO `skill_categories` (`id`, `parent_id`, `name`, `slug`, `created_at`) VALUES (22,NULL,'ELEVATE Phase 4: gaming','elevate-phase-4-topics','2026-11-23 20:52:52');
 
 -- skills: The skills behind the ELEVATE topics.
 INSERT INTO `skills` (`id`, `category_id`, `name`, `slug`, `is_approved`, `created_at`) VALUES (63,12,'Basic Computer Operation','elevate-basic-computer-operation',1,'2026-11-04 16:46:12');
@@ -788,34 +788,13 @@ INSERT INTO `module_prerequisites` (`module_id`, `prerequisite_id`) VALUES (119,
 INSERT INTO `program_phases` (`number`, `name`, `year`, `created_by`, `created_at`) VALUES (1,'Job Readiness',2021,NULL,'2026-11-22 19:12:44');
 INSERT INTO `program_phases` (`number`, `name`, `year`, `created_by`, `created_at`) VALUES (2,'Freelancing and Virtual Work',NULL,NULL,'2026-11-22 19:12:44');
 INSERT INTO `program_phases` (`number`, `name`, `year`, `created_by`, `created_at`) VALUES (3,'Digital Marketing and Entrepreneurship',NULL,NULL,'2026-11-22 19:12:44');
-INSERT INTO `program_phases` (`number`, `name`, `year`, `created_by`, `created_at`) VALUES (4,'Gaming',2026,5,'2026-11-22 20:22:02');
+INSERT INTO `program_phases` (`number`, `name`, `year`, `created_by`, `created_at`) VALUES (4,'gaming',2026,5,'2026-11-23 20:52:52');
 
 -- program_goals: The main goals beneficiaries choose from in the pre-assessment.
 INSERT INTO `program_goals` (`id`, `value`, `label`, `start_phase`) VALUES (1,'job','Get hired for an office or BPO job',NULL);
 INSERT INTO `program_goals` (`id`, `value`, `label`, `start_phase`) VALUES (2,'freelance','Work from home as a freelancer or virtual assistant',NULL);
 INSERT INTO `program_goals` (`id`, `value`, `label`, `start_phase`) VALUES (3,'business','Start or grow my own online business',NULL);
 INSERT INTO `program_goals` (`id`, `value`, `label`, `start_phase`) VALUES (4,'undecided','Not sure yet',1);
-
--- module_resources: The official ELEVATE program documents. Files and links people added are left out.
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (12,89,NULL,'pdf','Official ELEVATE Phase 3 Program Document','ELEVATE-Phase-3.pdf','elevate-phase-3.pdf','application/pdf',NULL,NULL,1,'2026-11-04 16:08:58');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (13,90,NULL,'pdf','Official ELEVATE Phase 4 Program Document','ELEVATE-Phase-4.pdf','elevate-phase-4.pdf','application/pdf',NULL,NULL,1,'2026-11-04 16:08:58');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (14,95,NULL,'pdf','Official ELEVATE Phase 1 Program Document','ELEVATE-Phase-1.pdf','elevate-phase-1.pdf','application/pdf',NULL,NULL,1,'2026-11-04 16:46:12');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (15,99,NULL,'pdf','Official ELEVATE Phase 1 Program Document','ELEVATE-Phase-1.pdf','elevate-phase-1.pdf','application/pdf',NULL,NULL,1,'2026-11-04 16:46:12');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (16,100,NULL,'pdf','Official ELEVATE Phase 1 Program Document','ELEVATE-Phase-1.pdf','elevate-phase-1.pdf','application/pdf',NULL,NULL,1,'2026-11-04 16:46:12');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (17,96,NULL,'pdf','Official ELEVATE Phase 1 Program Document','ELEVATE-Phase-1.pdf','elevate-phase-1.pdf','application/pdf',NULL,NULL,1,'2026-11-04 16:46:12');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (18,97,NULL,'pdf','Official ELEVATE Phase 1 Program Document','ELEVATE-Phase-1.pdf','elevate-phase-1.pdf','application/pdf',NULL,NULL,1,'2026-11-04 16:46:12');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (19,98,NULL,'pdf','Official ELEVATE Phase 1 Program Document','ELEVATE-Phase-1.pdf','elevate-phase-1.pdf','application/pdf',NULL,NULL,1,'2026-11-04 16:46:12');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (21,101,NULL,'pdf','Official ELEVATE Phase 2 Program Document','ELEVATE-Phase-2.pdf','elevate-phase-2.pdf','application/pdf',NULL,NULL,1,'2026-11-04 16:46:12');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (22,102,NULL,'pdf','Official ELEVATE Phase 2 Program Document','ELEVATE-Phase-2.pdf','elevate-phase-2.pdf','application/pdf',NULL,NULL,1,'2026-11-04 16:46:12');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (23,105,NULL,'pdf','Official ELEVATE Phase 2 Program Document','ELEVATE-Phase-2.pdf','elevate-phase-2.pdf','application/pdf',NULL,NULL,1,'2026-11-04 16:46:12');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (24,104,NULL,'pdf','Official ELEVATE Phase 2 Program Document','ELEVATE-Phase-2.pdf','elevate-phase-2.pdf','application/pdf',NULL,NULL,1,'2026-11-04 16:46:12');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (25,103,NULL,'pdf','Official ELEVATE Phase 2 Program Document','ELEVATE-Phase-2.pdf','elevate-phase-2.pdf','application/pdf',NULL,NULL,1,'2026-11-04 16:46:12');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (34,118,NULL,'pdf','Official ELEVATE Phase 3 Program Document','ELEVATE-Phase-3.pdf','elevate-phase-3.pdf','application/pdf',NULL,NULL,1,'2026-11-04 17:24:14');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (35,119,NULL,'pdf','Official ELEVATE Phase 3 Program Document','ELEVATE-Phase-3.pdf','elevate-phase-3.pdf','application/pdf',NULL,NULL,1,'2026-11-04 17:24:14');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (36,117,NULL,'pdf','Official ELEVATE Phase 3 Program Document','ELEVATE-Phase-3.pdf','elevate-phase-3.pdf','application/pdf',NULL,NULL,1,'2026-11-04 17:24:14');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (37,118,NULL,'pdf','Official ELEVATE Phase 4 (On Air) Program Document','ELEVATE-Phase-4.pdf','elevate-phase-4.pdf','application/pdf',NULL,NULL,2,'2026-11-04 17:24:14');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (38,119,NULL,'pdf','Official ELEVATE Phase 4 (On Air) Program Document','ELEVATE-Phase-4.pdf','elevate-phase-4.pdf','application/pdf',NULL,NULL,2,'2026-11-04 17:24:14');
-INSERT INTO `module_resources` (`id`, `module_id`, `uploaded_by`, `resource_type`, `title`, `original_filename`, `storage_filename`, `mime_type`, `file_size`, `external_url`, `sort_order`, `created_at`) VALUES (39,117,NULL,'pdf','Official ELEVATE Phase 4 (On Air) Program Document','ELEVATE-Phase-4.pdf','elevate-phase-4.pdf','application/pdf',NULL,NULL,2,'2026-11-04 17:24:14');
 
 SET FOREIGN_KEY_CHECKS = 1;
 -- Done. Next: sign up in the app, then make your account the admin (see README.md).

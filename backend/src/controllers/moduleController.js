@@ -362,8 +362,8 @@ async function listModules(req, res) {
     module.certificate = certificate || null;
   });
 
-  // Official resources for everyone; a specialist's own materials only for that
-  // specialist and the beneficiaries matched to them on the topic.
+  // Materials are added by specialists: each one's only for that specialist and
+  // the beneficiaries matched to them on the topic.
   const [resources] = await pool.query(
     `SELECT mr.id, mr.module_id, mr.resource_type, mr.title, mr.original_filename, mr.mime_type,
             mr.external_url, mr.sort_order, mr.file_size, mr.uploaded_by, mr.created_at,
@@ -372,8 +372,7 @@ async function listModules(req, res) {
      LEFT JOIN users uploader ON uploader.id = mr.uploaded_by
      WHERE mr.module_id IN (?)
        AND (
-         mr.uploaded_by IS NULL
-         OR mr.uploaded_by = ?
+         mr.uploaded_by = ?
          OR EXISTS (
            SELECT 1 FROM elevate_module_assignments material_assignment
            WHERE material_assignment.module_id = mr.module_id
@@ -382,7 +381,7 @@ async function listModules(req, res) {
              AND material_assignment.assignment_status = 'assigned'
          )
        )
-     ORDER BY mr.module_id, mr.uploaded_by IS NOT NULL, mr.sort_order, mr.id`,
+     ORDER BY mr.module_id, mr.sort_order, mr.id`,
     [moduleIds, userId, userId]
   );
   resources.forEach((resource) => {
@@ -396,7 +395,6 @@ async function listModules(req, res) {
       mimeType: resource.mime_type,
       url: resource.external_url,
       fileSize: resource.file_size ? Number(resource.file_size) : null,
-      official: !resource.uploaded_by,
       uploadedByMe: String(resource.uploaded_by) === String(userId),
       uploaderName: resource.uploader_name || null,
       addedAt: resource.created_at,
