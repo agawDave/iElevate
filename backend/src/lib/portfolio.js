@@ -1,7 +1,6 @@
 const { pool } = require('../config/db');
 
-// A beneficiary's learning portfolio: their skill profile (skill check), and
-// for every topic they learned or are learning: the specialist, dates, the
+// A beneficiary's learning portfolio: for every topic they learned or are learning: the specialist, dates, the
 // certificate, pre-test / post-test scores, activities done, sessions held,
 // and the written and file work they sent with the specialist's replies.
 // Returns null if the user isn't a beneficiary.
@@ -158,7 +157,7 @@ async function buildPortfolio(beneficiaryId) {
       };
     });
 
-  // Skill profile: the band at the first skill check, and at the latest retake.
+  // Each topic's band at the first skill check, and at the latest retake (for the Career tab's skills).
   const skillTopics = [];
   skills.forEach((row) => {
     let entry = skillTopics.find((item) => item.moduleId === Number(row.module_id));
@@ -169,7 +168,6 @@ async function buildPortfolio(beneficiaryId) {
     if (row.test_kind === 'pre' && !entry.startBand) entry.startBand = row.band;
     else if (row.test_kind === 'post') entry.latestBand = row.band;
   });
-  const takenDates = skills.map((row) => new Date(row.taken_at).getTime());
 
   const completed = topics.filter((topic) => topic.stage === 'completed');
   const completedIds = new Set(completed.map((topic) => topic.moduleId));
@@ -227,11 +225,6 @@ async function buildPortfolio(beneficiaryId) {
       hoursCompleted: completed.reduce((sum, topic) => sum + (topic.hours || 0), 0),
       onlineSessions: topics.reduce((sum, topic) => sum + topic.onlineSessions, 0),
       faceToFaceSessions: topics.reduce((sum, topic) => sum + topic.faceToFaceSessions, 0),
-    },
-    skillProfile: {
-      firstTakenAt: takenDates.length ? new Date(Math.min(...takenDates)) : null,
-      lastTakenAt: takenDates.length ? new Date(Math.max(...takenDates)) : null,
-      topics: skillTopics,
     },
     topics,
     generatedAt: new Date(),

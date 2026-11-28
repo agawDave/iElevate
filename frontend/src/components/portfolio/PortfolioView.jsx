@@ -5,7 +5,6 @@ import { ActivityFileLink, FilePicker } from '../modules/ActivityFiles';
 import { RubricSummary } from '../modules/Rubric';
 import { openCertificate } from '../../lib/certificates';
 import { ACTIVITY_FILE_HINT } from '../../lib/activityFiles';
-import { BAND_LABELS, BAND_STYLES } from '../../lib/profileLabels';
 import { avatarTint, initials } from '../../lib/people';
 import EmptyState from '../ui/EmptyState';
 import { TopicTile } from '../ui/TopicFace';
@@ -13,18 +12,14 @@ import { useConfirm } from '../../context/ConfirmContext';
 
 const TYPE_LABELS = { written: 'Written task', file: 'File task' };
 export const ADDED_LABEL = 'Added by the beneficiary';
-const PHOTO_ACCEPT = '.jpg,.jpeg,.png';
 const SECTIONS = [
   { id: 'pf-about', title: 'About Me' },
-  { id: 'pf-skills', title: 'Skill profile' },
   { id: 'pf-works', title: 'Sample works' },
   { id: 'pf-certificates', title: 'Certificates and recognitions' },
-  { id: 'pf-photos', title: 'Photos' },
 ];
 const ITEM_COPY = {
   project: { add: '+ Add a project', title: 'Project title', placeholder: 'e.g. Website for our barangay store', notes: 'What is it, and what did you do?', file: 'File (optional if you described it)' },
   award: { add: '+ Add an award', title: 'Award or recognition', placeholder: 'e.g. Best Project, Barangay Skills Fair', notes: 'Who gave it, and why? (optional)', file: 'Picture or file of the award (optional)' },
-  photo: { add: '+ Add a photo', title: 'Photo title', placeholder: 'e.g. Our training at the barangay hall', notes: 'Caption (optional)', file: 'Photo' },
 };
 
 export function longDate(value) {
@@ -33,19 +28,10 @@ export function longDate(value) {
   return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function photoError(file) {
-  return /\.(jpe?g|png)$/i.test(file.name) ? '' : 'Choose a JPG or PNG photo.';
-}
-
 export function Avatar({ person, about, size }) {
   return about.avatarUrl
     ? <img src={about.avatarUrl} alt={`${person.name}'s profile`} className={`${size} rounded-full object-cover`} />
     : <span className={`${size} flex items-center justify-center rounded-full text-2xl font-bold ${avatarTint(person.name)}`} aria-hidden="true">{initials(person.name)}</span>;
-}
-
-function Band({ band }) {
-  if (!band) return <span className="text-xs text-slate-400">—</span>;
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${BAND_STYLES[band] || 'bg-stone-100 text-slate-600'}`}>{BAND_LABELS[band] || band}</span>;
 }
 
 function Stat({ label, value }) {
@@ -235,7 +221,7 @@ export function ItemForm({ kind, item, onDone, onCancel }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const hasFile = Boolean(file) || keepFile;
-  const canSave = title.trim() && (kind !== 'photo' || hasFile) && (!['project', 'letter'].includes(kind) || hasFile || description.trim());
+  const canSave = title.trim() && (!['project', 'letter'].includes(kind) || hasFile || description.trim());
 
   async function save(event) {
     event.preventDefault();
@@ -285,9 +271,7 @@ export function ItemForm({ kind, item, onDone, onCancel }) {
           file={file}
           onChange={setFile}
           buttonText={item?.file ? 'Replace file' : 'Choose file'}
-          accept={kind === 'photo' ? PHOTO_ACCEPT : undefined}
-          validate={kind === 'photo' ? photoError : undefined}
-          hint={kind === 'photo' ? 'JPG or PNG. Up to 20 MB.' : ACTIVITY_FILE_HINT}
+          hint={ACTIVITY_FILE_HINT}
         />
       </div>
       {error && <p role="alert" className="mt-2 text-sm text-red-600">{error}</p>}
@@ -361,29 +345,16 @@ export default function PortfolioView({ data, own = true, onChanged }) {
   const [fileError, setFileError] = useState('');
   const projects = useItemEditor(onChanged);
   const awards = useItemEditor(onChanged);
-  const photos = useItemEditor(onChanged);
-  const { person, about, summary, skillProfile, topics, items } = data;
+  const { person, about, summary, topics, items } = data;
   const phases = [...new Set(topics.map((topic) => topic.phase))];
   const byKind = (kind) => items.filter((item) => item.kind === kind);
   const certificates = topics.filter((topic) => topic.certificate);
-  const counts = [
-    '',
-    skillProfile.topics.length ? `${skillProfile.topics.length} topics` : '',
-    `${topics.length} topic${topics.length === 1 ? '' : 's'}, ${byKind('project').length} project${byKind('project').length === 1 ? '' : 's'}`,
-    `${certificates.length} certificate${certificates.length === 1 ? '' : 's'}, ${byKind('award').length} award${byKind('award').length === 1 ? '' : 's'}`,
-    `${byKind('photo').length} photo${byKind('photo').length === 1 ? '' : 's'}`,
-  ];
   const aboutRows = [
     ['School or organization', about.schoolOrOrg],
     ['Goal', about.goalLabel],
     ['Address', person.place],
     ['Joined iELEVATE', longDate(person.joinedAt)],
   ].filter(([, value]) => value);
-
-  function jump(event, id) {
-    event.preventDefault();
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
 
   return (
     <div>
@@ -397,21 +368,6 @@ export default function PortfolioView({ data, own = true, onChanged }) {
         {person.place && <p className="text-sm text-slate-500">{person.place}</p>}
         <p className="mt-3 hidden text-sm text-slate-500 print:block">Printed {new Date().toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}</p>
       </section>
-
-      {/* Contents: its own page on paper. */}
-      <nav aria-label="Contents" className="mb-6 rounded-2xl border border-stone-200 bg-white p-5 print:rounded-none print:border-0 print:p-0 break-after-page">
-        <h2 className="mb-2 text-lg font-bold text-slate-900">Contents</h2>
-        <ol className="divide-y divide-stone-100">
-          {SECTIONS.map((section, index) => (
-            <li key={section.id}>
-              <a href={`#${section.id}`} onClick={(event) => jump(event, section.id)} className="flex items-baseline justify-between gap-3 py-2 text-sm hover:text-brand-600">
-                <span className="font-medium text-slate-800">{index + 1}. {section.title}</span>
-                <span className="text-xs text-slate-500">{counts[index]}</span>
-              </a>
-            </li>
-          ))}
-        </ol>
-      </nav>
 
       {fileError && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{fileError}</p>}
 
@@ -441,29 +397,7 @@ export default function PortfolioView({ data, own = true, onChanged }) {
         </div>
       </Section>
 
-      <Section index={1}>
-        <p className="mb-3 text-sm text-slate-500">
-          {skillProfile.topics.length
-            ? `From the ELEVATE pre-assessment${skillProfile.firstTakenAt ? `, first taken ${longDate(skillProfile.firstTakenAt)}` : ''}${skillProfile.lastTakenAt && longDate(skillProfile.lastTakenAt) !== longDate(skillProfile.firstTakenAt) ? `, retaken ${longDate(skillProfile.lastTakenAt)}` : ''}.`
-            : 'No pre-assessment yet.'}
-          {own && <> <Link to="/learning-plan" className="font-medium text-brand-600 hover:underline print:hidden">See your learning plan</Link></>}
-        </p>
-        {skillProfile.topics.length > 0 && (
-          <ul className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-            {skillProfile.topics.map((item) => (
-              <li key={item.moduleId} className="flex items-center justify-between gap-2 border-b border-stone-100 py-1 text-sm">
-                <span className="min-w-0 truncate text-slate-800">{item.title}</span>
-                <span className="flex shrink-0 items-center gap-1">
-                  <Band band={item.startBand} />
-                  {item.latestBand && <><span className="text-xs text-slate-400" aria-label="now">→</span><Band band={item.latestBand} /></>}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      <Section index={2} plain>
+      <Section index={1} plain>
         <p className="-mt-2 mb-4 text-sm text-slate-500">
           Test scores, activities, {own ? 'your' : 'their'} work, reflections and the specialist&apos;s feedback, by topic.
         </p>
@@ -493,7 +427,7 @@ export default function PortfolioView({ data, own = true, onChanged }) {
           : <p className="mt-1 text-sm text-slate-500">{own ? 'Add anything you made on your own, like a website, a design or an artwork.' : 'None added.'}</p>}
       </Section>
 
-      <Section index={3} action={own && <AddButton label={ITEM_COPY.award.add} onClick={() => awards.setEditing('new')} />}>
+      <Section index={2} action={own && <AddButton label={ITEM_COPY.award.add} onClick={() => awards.setEditing('new')} />}>
         {awards.error && <p role="alert" className="mb-2 text-sm text-red-600">{awards.error}</p>}
         {awards.editing && <ItemForm key={awards.editing === 'new' ? 'new' : awards.editing.id} kind="award" item={awards.editing === 'new' ? null : awards.editing} onDone={awards.done} onCancel={() => awards.setEditing(null)} />}
         {certificates.length > 0 && (
@@ -511,30 +445,6 @@ export default function PortfolioView({ data, own = true, onChanged }) {
         )}
         {byKind('award').length > 0 && <ul className="mt-3 space-y-3">{byKind('award').map((item) => <ItemCard key={item.id} item={item} own={own} editor={awards} />)}</ul>}
         {!certificates.length && !byKind('award').length && <p className="text-sm text-slate-500">{own ? 'Certificates from your specialists appear here. You can also add awards and recognitions you received.' : 'None yet.'}</p>}
-      </Section>
-
-      <Section index={4} action={own && <AddButton label={ITEM_COPY.photo.add} onClick={() => photos.setEditing('new')} />}>
-        {photos.error && <p role="alert" className="mb-2 text-sm text-red-600">{photos.error}</p>}
-        {photos.editing && <ItemForm key={photos.editing === 'new' ? 'new' : photos.editing.id} kind="photo" item={photos.editing === 'new' ? null : photos.editing} onDone={photos.done} onCancel={() => photos.setEditing(null)} />}
-        {byKind('photo').length > 0 ? (
-          <ul className="mt-3 grid gap-4 sm:grid-cols-2 print:grid-cols-2">
-            {byKind('photo').map((item) => (
-              <li key={item.id} className="print:break-inside-avoid">
-                <figure className="overflow-hidden rounded-xl border border-stone-200 bg-white">
-                  <img src={item.previewUrl} alt={item.title} className="h-48 w-full bg-stone-100 object-cover" />
-                  <figcaption className="p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="min-w-0 text-sm font-semibold text-slate-900">{item.title}</p>
-                      {own && <ItemActions item={item} editor={photos} />}
-                    </div>
-                    {item.description && <p className="mt-0.5 whitespace-pre-line text-sm text-slate-700">{item.description}</p>}
-                    <p className="mt-0.5 text-xs text-slate-500">{[longDate(item.itemDate), ADDED_LABEL].filter(Boolean).join(' · ')}</p>
-                  </figcaption>
-                </figure>
-              </li>
-            ))}
-          </ul>
-        ) : <p className="text-sm text-slate-500">{own ? 'Add photos of training events, group work or performance tasks.' : 'None added.'}</p>}
       </Section>
     </div>
   );

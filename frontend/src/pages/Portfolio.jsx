@@ -5,8 +5,8 @@ import PortfolioView from '../components/portfolio/PortfolioView';
 import PageHeader, { headerPrimaryClass } from '../components/layout/PageHeader';
 import { SkeletonLines } from '../components/ui/Skeleton';
 
-// "My Portfolio": the beneficiary's learning record (cover, contents, About Me,
-// skill profile, sample works, certificates, photos). It prints on its own.
+// "My Portfolio": the beneficiary's learning record (cover, About Me, sample
+// works, certificates). It prints on its own.
 export default function Portfolio() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -28,7 +28,7 @@ export default function Portfolio() {
         {/* On paper the portfolio starts with its own first page (the header doesn't print). */}
         <PageHeader
           title="My Portfolio"
-          subtitle="Your skills, the topics you learned, your scores, your work and your certificates, all in one place."
+          subtitle="The topics you learned, your scores, your work and your certificates, all in one place."
           actions={<button type="button" onClick={() => window.print()} disabled={!data} className={headerPrimaryClass}>Print / Save as PDF</button>}
         />
         {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
