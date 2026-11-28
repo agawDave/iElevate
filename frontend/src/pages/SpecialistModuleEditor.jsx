@@ -8,7 +8,7 @@ import MaterialsPanel from '../components/modules/MaterialsPanel';
 import TestsPanel from '../components/modules/TestsPanel';
 import LineIcon from '../components/ui/LineIcon';
 import { SkeletonLines } from '../components/ui/Skeleton';
-import { moduleStatusOf } from '../lib/moduleStatus';
+import { moduleStatusOf, testsSummary } from '../lib/moduleStatus';
 import { phaseInfo } from '../lib/topicFaces';
 
 const MIN_OVERVIEW = 30;
@@ -98,7 +98,7 @@ export default function SpecialistModuleEditor() {
   const ready = {
     about: form.title.trim().length > 0 && form.overview.trim().length >= MIN_OVERVIEW,
     materials: counts.materials > 0,
-    test: counts.testQuestions > 0,
+    test: counts.testQuestions.pre > 0 && counts.testQuestions.post > 0,
   };
   const canSubmit = ready.about && ready.materials && ready.test;
   const canSend = ['none', 'draft', 'changes_requested'].includes(status);
@@ -214,9 +214,9 @@ export default function SpecialistModuleEditor() {
                 onClick={() => setPanel('materials')}
               />
               <ContentRow
-                title="Pre/post-test"
-                detail={counts.testQuestions ? `${counts.testQuestions} question${counts.testQuestions === 1 ? '' : 's'}` : 'Not added yet'}
-                button={counts.testQuestions ? 'Edit questions' : 'Add questions'}
+                title="Pre-test & post-test"
+                detail={`Each with its own questions · ${testsSummary(counts.testQuestions)}`}
+                button={counts.testQuestions.pre || counts.testQuestions.post ? 'Edit questions' : 'Add questions'}
                 onClick={() => setPanel('test')}
               />
             </ul>
@@ -235,7 +235,7 @@ export default function SpecialistModuleEditor() {
           <ul className="mt-3 space-y-2 text-sm">
             <CheckItem done={ready.about}>Title and overview written</CheckItem>
             <CheckItem done={ready.materials}>At least one material</CheckItem>
-            <CheckItem done={ready.test}>Pre/post-test questions</CheckItem>
+            <CheckItem done={ready.test}>Pre-test and post-test questions</CheckItem>
           </ul>
           {!locked && (
             <div className="mt-5 space-y-2">

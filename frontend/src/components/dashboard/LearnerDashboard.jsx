@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import AdminMessages from './AdminMessages';
 import { Link } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
-import { Card, DashboardBanner, ProgressBar, SessionRow, SideColumn, StatTiles } from './DashboardParts';
+import { Card, DashboardBanner, SessionRow, SideColumn, StatTiles } from './DashboardParts';
 import LineIcon from '../ui/LineIcon';
 import { DashboardSkeleton } from '../ui/Skeleton';
 import EmptyState from '../ui/EmptyState';
@@ -26,7 +27,6 @@ const STAGE_ORDER = { learning: 0, applied: 1, completed: 2 };
 
 function TopicRow({ topic }) {
   const stage = STAGES[topic.stage];
-  const hours = topic.faceToFace;
   const testLine = topic.test && (topic.test.pre
     ? `Pre-test ${topic.test.pre.score}/${topic.test.pre.total} → Post-test ${topic.test.post ? `${topic.test.post.score}/${topic.test.post.total}` : '—'}`
     : topic.test.preOpen ? 'Pre-test waiting' : null);
@@ -43,13 +43,7 @@ function TopicRow({ topic }) {
           <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${stage.style}`}>{stage.check && <LineIcon name="check" strokeWidth={2.5} className="h-3 w-3" />}{stage.label}</span>
         </div>
         {topic.stage === 'learning' && (
-          <div className="mt-2 flex items-center gap-3">
-            {hours?.hours > 0 && !hours.onlineOnly ? (
-              <>
-                <ProgressBar done={Math.min(hours.hoursDone, hours.hours)} total={hours.hours} label={`${topic.title} face-to-face hours`} />
-                <span className="shrink-0 text-xs tabular-nums text-slate-600">{hours.hoursDone} of {hours.hours} hours</span>
-              </>
-            ) : <span className="flex-1 text-xs text-slate-500">Online</span>}
+          <div className="mt-2 flex justify-end">
             <Link to={to} className="shrink-0 rounded-lg bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100">Open</Link>
           </div>
         )}
@@ -74,6 +68,7 @@ export default function LearnerDashboard({ greeting, firstName }) {
   return (
     <div>
       <DashboardBanner title={`${greeting}, ${firstName} 👋`} subtitle="Here's what's happening with your learning journey." />
+      <AdminMessages />
 
       {error && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
       {!data && !error && <DashboardSkeleton />}
@@ -100,8 +95,8 @@ export default function LearnerDashboard({ greeting, firstName }) {
                   : data.summary.onlineOnly
                     ? <EmptyState icon="calendar" compact title="You learn online" action={{ to: '/sessions', label: 'See your online sessions' }}>You live outside the Philippines, so each test you take counts as an online session.</EmptyState>
                     : data.summary.learning > 0
-                    ? <EmptyState icon="calendar" compact title="No sessions yet" action={{ to: '/sessions', label: 'Book a session' }}>Meet your specialist face to face, or join an open session on a topic you need.</EmptyState>
-                    : <EmptyState icon="calendar" compact title="No sessions yet">Once a specialist accepts you, you can book sessions with them.</EmptyState>}
+                    ? <EmptyState icon="calendar" compact title="No sessions yet">Your specialist sets face-to-face sessions. You get a notification when they do.</EmptyState>
+                    : <EmptyState icon="calendar" compact title="No sessions yet">Once a specialist accepts you, they can set face-to-face sessions for you.</EmptyState>}
               </Card>
             </SideColumn>
           </div>

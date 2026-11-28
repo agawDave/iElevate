@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import axiosClient from '../api/axiosClient';
 import MaterialsList from '../components/modules/MaterialsList';
 import { withFileLinks } from '../lib/moduleFiles';
+import { formatSessionRange } from '../lib/sessions';
 import LineIcon from '../components/ui/LineIcon';
 import EmptyState from '../components/ui/EmptyState';
 import { SkeletonLines } from '../components/ui/Skeleton';
@@ -20,7 +21,7 @@ function TestStep({ kind, attempt, active, locked, onClick }) {
       type="button"
       onClick={onClick}
       aria-current={active ? 'step' : undefined}
-      title={locked && kind === 'post' ? 'Opens after your face-to-face sessions' : undefined}
+      title={locked && kind === 'post' ? 'Your specialist opens it when you’re ready' : undefined}
       className={`flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition ${active ? 'ring-2 ring-brand-600 ring-offset-2' : ''} ${
         attempt ? 'bg-emerald-600 text-white'
           : locked ? 'border border-dashed border-stone-300 bg-stone-50 text-slate-400'
@@ -32,8 +33,8 @@ function TestStep({ kind, attempt, active, locked, onClick }) {
   );
 }
 
-// Takes the pre-test or post-test, or shows the result. The same questions
-// are used both times; the correct answers show only after the post-test.
+// Takes the pre-test or post-test, or shows the result. Each test has its own
+// questions; the correct answers show only after the post-test.
 // postWaiting: why the post-test isn't open yet.
 function TestPanel({ moduleId, kind, test, completed, postReady, postWaiting, onTaken }) {
   const [answers, setAnswers] = useState({});
@@ -67,11 +68,12 @@ function TestPanel({ moduleId, kind, test, completed, postReady, postWaiting, on
           <p className="text-sm text-emerald-800">Your pre-test score</p>
           <p className="text-3xl font-extrabold tabular-nums text-emerald-900">{attempt.score} of {attempt.total}</p>
         </div>
-        <p className="mt-3 text-sm text-slate-600">After your face-to-face sessions, you&apos;ll answer the same questions again in the post-test to see what you learned.</p>
+        <p className="mt-3 text-sm text-slate-600">After you study the materials, the post-test shows what you learned.</p>
       </div>
     );
   } else if (attempt && kind === 'post') {
-    const gain = test.pre ? attempt.score - test.pre.score : null;
+    const share = (result) => (result.total ? result.score / result.total : 0);
+    const gain = test.pre ? share(attempt) - share(test.pre) : null;
     body = (
       <div>
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4">
@@ -90,7 +92,7 @@ function TestPanel({ moduleId, kind, test, completed, postReady, postWaiting, on
           </div>
           {gain !== null && (
             <p className="ml-auto text-sm font-semibold text-emerald-800">
-              {gain > 0 ? `${gain} more correct than before. Well done!` : gain === 0 ? 'The same as before.' : `${-gain} fewer than before.`}
+              {gain > 0 ? 'Better than your pre-test. Well done!' : gain === 0 ? 'The same as your pre-test.' : 'Lower than your pre-test.'}
             </p>
           )}
         </div>
@@ -122,7 +124,7 @@ function TestPanel({ moduleId, kind, test, completed, postReady, postWaiting, on
         <p className="mb-4 text-sm text-slate-600">
           {kind === 'pre'
             ? `Before you start, answer these ${questions.length} questions to show what you already know. It's fine not to know them yet! You take it once and see your score.`
-            : `The same questions as your pre-test. Let's see what you learned! You take it once.`}
+            : `${questions.length} questions about what you learned. You take it once.`}
         </p>
         <ol className="space-y-4">
           {questions.map((question, index) => (
@@ -160,7 +162,7 @@ function TestPanel({ moduleId, kind, test, completed, postReady, postWaiting, on
     );
   } else if (completed) {
     body = <p className="text-sm text-slate-600">This topic is completed. You didn&apos;t take the {label.toLowerCase()}.</p>;
-  } else if (kind === 'post' && test.questionCount) {
+  } else if (kind === 'post' && test.counts.post) {
     body = (
       <p className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-4 py-3 text-sm text-slate-600">
         {test.pre ? postWaiting : 'Take the pre-test first.'}
@@ -173,7 +175,7 @@ function TestPanel({ moduleId, kind, test, completed, postReady, postWaiting, on
   return (
     <article className="rounded-2xl border border-stone-200 bg-white p-6">
       <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
-        {label}{test.questionCount ? ` · ${test.questionCount} question${test.questionCount === 1 ? '' : 's'}` : ''}
+        {label}{test.counts[kind] ? ` · ${test.counts[kind]} question${test.counts[kind] === 1 ? '' : 's'}` : ''}
       </p>
       <h3 className="mb-4 mt-1 text-lg font-semibold text-slate-900">
         {kind === 'pre' ? 'What do you know already?' : 'What did you learn?'}
@@ -183,71 +185,94 @@ function TestPanel({ moduleId, kind, test, completed, postReady, postWaiting, on
   );
 }
 
-// The Face-to-face pill in the row of steps: hours so far, of the module's hours.
-function FaceToFaceStep({ faceToFace, active, onClick }) {
-  const done = faceToFace.ready;
+// The Materials pill in the row of steps, between the pre-test and the post-test.
+function MaterialsStep({ count, active, onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-current={active ? 'step' : undefined}
-      className={`flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition ${active ? 'ring-2 ring-brand-600 ring-offset-2' : ''} ${
-        done ? 'bg-emerald-600 text-white' : 'border border-brand-600 bg-white text-brand-700 hover:bg-brand-50'
-      }`}
+      className={`flex h-9 items-center rounded-full border border-brand-600 bg-white px-3.5 text-sm font-semibold text-brand-700 transition hover:bg-brand-50 ${active ? 'ring-2 ring-brand-600 ring-offset-2' : ''}`}
     >
-      {done && <LineIcon name="check" strokeWidth={2.5} />}
-      {faceToFace.onlineOnly ? 'Online' : `Face-to-face ${faceToFace.hoursDone}/${faceToFace.hours} h`}
+      Materials{count ? ` (${count})` : ''}
     </button>
   );
 }
 
-// The face-to-face sessions between the pre-test and the post-test.
-function FaceToFacePanel({ moduleId, faceToFace, firstName, done, postReady, onPost }) {
-  const { hours, hoursDone, onlineOnly } = faceToFace;
-  const percent = hours ? Math.min(100, Math.round((hoursDone / hours) * 100)) : 100;
+// The face-to-face sessions the specialist set on this topic. Learners get a
+// notification when one is set, and say they'll attend to save their seat.
+function FaceToFaceSessions({ sessions, firstName, onChange }) {
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState('');
+
+  async function toggle(session) {
+    setBusy(session.moduleSessionId);
+    setError('');
+    try {
+      const url = `/sessions/open/${session.moduleSessionId}/join`;
+      await (session.joined ? axiosClient.delete(url) : axiosClient.post(url));
+      await onChange();
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'Something went wrong. Please try again.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
-    <article className="rounded-2xl border border-stone-200 bg-white p-6">
-      <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">{onlineOnly ? 'Online' : 'Face-to-face sessions'}</p>
-      {onlineOnly ? (
-        <p className="mt-2 text-sm text-slate-600">You learn online, so you don&apos;t need face-to-face sessions. {firstName} opens your post-test.</p>
+    <section className="mt-8">
+      <h2 className="mb-3 text-[17px] font-semibold text-slate-900">Face-to-face sessions</h2>
+      {sessions.length ? (
+        <ul className="space-y-3">
+          {sessions.map((session) => (
+            <li key={session.moduleSessionId} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white p-4">
+              <div className="min-w-0">
+                <p className="font-medium text-slate-900">{formatSessionRange(session.startsAt, session.endsAt)}</p>
+                <p className="text-sm text-slate-600">{session.place}</p>
+              </div>
+              {session.joined ? (
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1 text-sm font-semibold text-emerald-700"><LineIcon name="check" strokeWidth={2.5} />You&apos;re attending</span>
+                  <button type="button" disabled={busy !== null} onClick={() => toggle(session)} className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-stone-100 disabled:opacity-50">Can&apos;t make it</button>
+                </div>
+              ) : session.full ? (
+                <span className="text-sm text-slate-500">Full</span>
+              ) : (
+                <button type="button" disabled={busy !== null} onClick={() => toggle(session)} className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-semibold text-brand-900 hover:bg-accent-550 disabled:opacity-50">
+                  {busy === session.moduleSessionId ? 'Saving…' : 'I’ll attend'}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
       ) : (
-        <>
-          <p className="mt-1 text-3xl font-extrabold tabular-nums text-slate-900">{hoursDone} <span className="text-lg font-semibold text-slate-500">of {hours} hours</span></p>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-stone-200" role="progressbar" aria-valuemin={0} aria-valuemax={hours} aria-valuenow={hoursDone} aria-label="Face-to-face hours">
-            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${percent}%` }} />
-          </div>
-          <p className="mt-3 text-sm text-slate-600">
-            {faceToFace.ready ? `Your face-to-face hours are done. ${firstName} opens your post-test.` : `Learn with ${firstName} face to face. Once your sessions reach ${hours} hours, ${firstName} opens your post-test.`}
-          </p>
-        </>
+        <p className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-4 py-3 text-sm text-slate-600">
+          {firstName} hasn&apos;t set a face-to-face session yet. You&apos;ll get a notification when they do.
+        </p>
       )}
-      {!done && (
-        <div className="mt-4 flex flex-wrap gap-2">
-          {postReady && <button type="button" onClick={onPost} className="rounded-lg bg-accent-500 px-5 py-2.5 text-sm font-semibold text-brand-900 hover:bg-accent-550">Take the post-test →</button>}
-          {!onlineOnly && !postReady && <Link to={`/sessions?moduleId=${moduleId}`} className="rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">Book a session →</Link>}
-        </div>
-      )}
-    </article>
+      {error && <p role="alert" className="mt-2 text-sm text-red-600">{error}</p>}
+    </section>
   );
 }
 
 // Where the module page opens: the pre-test if it's waiting, the post-test
-// once it's open or taken, else the face-to-face sessions.
+// once it's open or taken, else the materials.
 function startingStep(loaded) {
   if (loaded.test?.preOpen) return 'pre';
   if (loaded.test && (loaded.test.postOpen || loaded.test.post)) return 'post';
-  return 'f2f';
+  return 'materials';
 }
 
-// The module page: the pre-test, face-to-face sessions with the specialist,
-// then the post-test, which the specialist opens once the hours are done.
+// The module page: the pre-test, the specialist's materials, then the
+// post-test, which the specialist opens when the learner is ready. Below them,
+// the face-to-face sessions the specialist set on the topic.
 export default function ModulePage() {
   const { moduleId } = useParams();
   const { user } = useAuth();
   const [data, setData] = useState(null);
   const [resources, setResources] = useState([]);
   const [error, setError] = useState('');
-  const [current, setCurrent] = useState('f2f'); // 'pre', 'f2f' or 'post'
+  const [current, setCurrent] = useState('materials'); // 'pre', 'materials' or 'post'
   const stepsRef = useRef(null); // the steps, for the header's next-step button
 
   const load = useCallback(async () => {
@@ -290,9 +315,7 @@ export default function ModulePage() {
   const firstName = specialist.name.split(' ')[0];
   const preFirst = Boolean(test?.preOpen);
   const postReady = Boolean(test?.postOpen);
-  const postWaiting = !faceToFace || faceToFace.ready
-    ? `${firstName} opens your post-test after your face-to-face sessions.`
-    : `Your post-test opens after your face-to-face sessions (${faceToFace.hoursDone} of ${faceToFace.hours} hours). ${firstName} opens it for you.`;
+  const postWaiting = `${firstName} opens your post-test when you're ready. Study the materials in the meantime.`;
   const chatLink = data.conversationId ? `/modules?tab=${completed ? 'completed' : 'ongoing'}&chat=${data.conversationId}` : '/modules';
 
   // The header's one next step: go to that step and scroll down to it.
@@ -308,14 +331,14 @@ export default function ModulePage() {
   else if (preFirst) next = { label: 'Take the pre-test', onClick: () => goTo('pre') };
   else if (postReady) next = { label: 'Take the post-test', onClick: () => goTo('post') };
   else if (test.post) next = { note: `Done! ${firstName} will mark you completed.` };
-  else if (faceToFace && !faceToFace.ready) next = { label: 'Book a face-to-face session', to: `/sessions?moduleId=${module.id}` };
+  else if (resources.length) next = { label: 'Study the materials', onClick: () => goTo('materials') };
   else next = { note: `${firstName} opens your post-test next.` };
 
   return (
     <AppLayout>
       <div className="mx-auto max-w-3xl">
         <Link to="/modules" className="text-sm text-slate-500 hover:text-brand-600">← Back to Modules</Link>
-        <ModuleHero module={module} specialist={specialist} faceToFace={faceToFace} completed={completed} chatLink={chatLink} next={next} />
+        <ModuleHero module={module} specialist={specialist} completed={completed} chatLink={chatLink} next={next} />
 
         {completed && data.certificate && (
           <CompletionCelebration
@@ -328,21 +351,23 @@ export default function ModulePage() {
           />
         )}
 
-        <section className="mt-7">
-          <h2 className="mb-2 text-[17px] font-semibold text-slate-900">Materials</h2>
-          <MaterialsList resources={resources} />
-        </section>
-
-        <section ref={stepsRef} className="mt-8 scroll-mt-6">
+        <section ref={stepsRef} className="mt-7 scroll-mt-6">
           <h2 className="mb-3 text-[17px] font-semibold text-slate-900">Steps</h2>
           <ol className="mb-4 flex flex-wrap items-center gap-2" aria-label="Steps">
             {test && <li><TestStep kind="pre" attempt={test.pre} active={current === 'pre'} onClick={() => setCurrent('pre')} /></li>}
-            {faceToFace && <li><FaceToFaceStep faceToFace={faceToFace} active={current === 'f2f'} onClick={() => setCurrent('f2f')} /></li>}
+            <li><MaterialsStep count={resources.length} active={current === 'materials'} onClick={() => setCurrent('materials')} /></li>
             {test && <li><TestStep kind="post" attempt={test.post} active={current === 'post'} locked={!test.post && !postReady} onClick={() => setCurrent('post')} /></li>}
           </ol>
 
-          {current === 'f2f' && faceToFace && (
-            <FaceToFacePanel moduleId={module.id} faceToFace={faceToFace} firstName={firstName} done={completed || Boolean(test?.post)} postReady={postReady} onPost={() => setCurrent('post')} />
+          {current === 'materials' && (
+            <article className="rounded-2xl border border-stone-200 bg-white p-6">
+              <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">Materials from {firstName}</p>
+              <h3 className="mb-4 mt-1 text-lg font-semibold text-slate-900">Study these before the post-test</h3>
+              <MaterialsList resources={resources} />
+              {postReady && (
+                <button type="button" onClick={() => setCurrent('post')} className="mt-4 rounded-lg bg-accent-500 px-5 py-2.5 text-sm font-semibold text-brand-900 hover:bg-accent-550">Take the post-test →</button>
+              )}
+            </article>
           )}
           {(current === 'pre' || current === 'post') && test && (
             <TestPanel
@@ -356,10 +381,12 @@ export default function ModulePage() {
               onTaken={refresh}
             />
           )}
-          {!test && current !== 'f2f' && (
+          {!test && current !== 'materials' && (
             <div className="rounded-2xl border border-stone-200 bg-white"><EmptyState icon="pencil" compact title="No pre-test yet">{firstName} hasn&apos;t added the pre-test and post-test yet.</EmptyState></div>
           )}
         </section>
+
+        {!completed && !faceToFace?.onlineOnly && <FaceToFaceSessions sessions={data.sessions || []} firstName={firstName} onChange={refresh} />}
       </div>
     </AppLayout>
   );

@@ -15,10 +15,16 @@ export function moduleStatusOf(module) {
 // The specialist's create / edit page for their module on a topic.
 export const moduleEditorPath = (topicId) => `/teach/${topicId}`;
 
-export function contentSummary({ materials = 0, testQuestions = 0, hours = 0 } = {}) {
+// { pre, post } question counts → "pre-test 5 · post-test 4" (empty ones say so).
+export function testsSummary({ pre = 0, post = 0 } = {}) {
+  if (!pre && !post) return 'no pre-test or post-test yet';
+  return [pre ? `pre-test ${pre}` : 'no pre-test', post ? `post-test ${post}` : 'no post-test'].join(' · ');
+}
+
+export function contentSummary({ materials = 0, testQuestions, hours = 0 } = {}) {
   return [
     hours ? `${hours} hour${hours === 1 ? '' : 's'}` : null,
     `${materials} material${materials === 1 ? '' : 's'}`,
-    testQuestions ? `pre/post-test: ${testQuestions} question${testQuestions === 1 ? '' : 's'}` : 'no pre/post-test',
+    testsSummary(testQuestions),
   ].filter(Boolean).join(' · ');
 }

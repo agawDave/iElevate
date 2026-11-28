@@ -8,6 +8,7 @@ CREATE TABLE `module_test_questions` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `module_id` int(10) unsigned NOT NULL,
   `specialist_id` bigint(20) unsigned NOT NULL,
+  `test_kind` enum('pre','post') NOT NULL DEFAULT 'pre',
   `prompt` varchar(1000) NOT NULL,
   `options` text NOT NULL,
   `correct_option` tinyint(3) unsigned NOT NULL,
@@ -16,7 +17,7 @@ CREATE TABLE `module_test_questions` (
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `fk_module_test_question_specialist` (`specialist_id`),
-  KEY `idx_module_test_question_owner` (`module_id`,`specialist_id`,`sort_order`),
+  KEY `idx_module_test_question_owner` (`module_id`,`specialist_id`,`test_kind`,`sort_order`),
   CONSTRAINT `fk_module_test_question_module` FOREIGN KEY (`module_id`) REFERENCES `learning_modules` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_module_test_question_specialist` FOREIGN KEY (`specialist_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

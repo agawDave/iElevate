@@ -44,7 +44,6 @@ $about = @{
   module_test_attempts         = "Beneficiaries' pre-test and post-test scores, each with a copy of the questions as they were."
   module_test_questions        = 'The pre-test and post-test questions a specialist writes for a topic.'
   module_prerequisites         = 'Which modules a module needs first (a topic waits as "next up" until the beneficiary can do them).'
-  notifications                = 'The notification bell: face-to-face session notices for each person (requested, accepted, cancelled, posted, joined), and when they read each one.'
   program_goals                = 'The answers to the pre-assessment''s "What is your main goal in joining ELEVATE?" question, managed by the admin; modules list the goals that need them (learning_modules.goal_tracks), and "Not sure yet" asks about the phase in start_phase (0 = all phases; normal goals leave it empty).'
   program_phases               = 'The ELEVATE phases: number, name and the year each was created (its modules have learning_modules.phase).'
   portfolio_items              = 'What beneficiaries add to their portfolio: projects, awards, photos, licenses, trainings and letters.'

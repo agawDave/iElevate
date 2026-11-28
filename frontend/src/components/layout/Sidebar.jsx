@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import axiosClient from '../../api/axiosClient';
 import { useSocket } from '../../context/SocketContext';
 import elevateLogo from '../../assets/elevate-logo.png';
 import LineIcon from '../ui/LineIcon';
-import DirectChatPanel from '../chat/DirectChatPanel';
-import { moduleEditorPath } from '../../lib/moduleStatus';
-import { waitedFor } from '../../lib/sessions';
 
 const icons = {
   dashboard: (
@@ -67,11 +64,6 @@ const icons = {
   credentials: (
     <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
       <path d="M10 2l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 14.27l-4.77 2.44.91-5.32L2.27 7.62l5.34-.78L10 2z" />
-    </svg>
-  ),
-  bell: (
-    <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-      <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zm0 16a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
     </svg>
   ),
   profile: (
@@ -135,33 +127,11 @@ const USER_TYPE_LABEL = {
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const { socket } = useSocket();
-  const location = useLocation();
   const navigate = useNavigate();
   const [pendingSessions, setPendingSessions] = useState(0);
   const [incomingMatches, setIncomingMatches] = useState(0);
   const [messageNotification, setMessageNotification] = useState(null);
-  // Chats where the other person wrote last: they stay in the notification bell until the user replies
-  // (a finished topic's chat only while unread: no reply is expected after the certificate).
-  const [awaitingReply, setAwaitingReply] = useState([]);
-  // The admin's chats where the admin wrote last (also in the bell), and the one open.
-  const [adminWaiting, setAdminWaiting] = useState([]);
-  const [adminChat, setAdminChat] = useState(null);
   const [adminCounts, setAdminCounts] = useState(null);
-  // The notification bell: face-to-face session notices, kept until read.
-  const [bell, setBell] = useState({ unread: 0, items: [] });
-  const [bellOpen, setBellOpen] = useState(false);
-
-  // Not polled: it loads with each page and when a notice arrives. The sidebar
-  // already polls every 10 seconds, close to the production rate limit.
-  function loadBell() {
-    if (user?.role === 'admin') return;
-    axiosClient.get('/notifications').then((response) => setBell(response.data.data)).catch(() => {});
-  }
-
-  async function markRead(id) {
-    await axiosClient.post('/notifications/read', id ? { id } : {}).catch(() => {});
-    loadBell();
-  }
 
   function loadNotifications() {
     if (user?.role === 'admin') {
@@ -170,26 +140,17 @@ export default function Sidebar() {
     }
     Promise.all([
       axiosClient.get('/sessions/modules/me'),
-      axiosClient.get('/messages/inbox'),
       // Specialists: applications waiting for them to accept (Incoming).
       user?.userType === 'specialist' ? axiosClient.get('/elevate/applications/incoming') : Promise.resolve(null),
-    ]).then(([sessions, messages, applications]) => {
-      const conversations = messages.data.data.conversations;
+    ]).then(([sessions, applications]) => {
       setPendingSessions(sessions.data.data.filter((item) => item.status === 'pending' && !item.scheduledByMe).length);
       setIncomingMatches(applications?.data.data.length || 0);
-      setAwaitingReply(conversations
-        .filter((item) => (item.status === 'ongoing' || item.unreadCount > 0) && item.lastSenderId && String(item.lastSenderId) !== String(user.id))
-        .sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt)));
-      setAdminWaiting((messages.data.data.adminChats || [])
-        .filter((item) => String(item.lastSenderId) !== String(user.id))
-        .map((item) => ({ ...item, moduleTitle: 'iELEVATE', admin: true })));
     }).catch(() => {});
   }
 
   useEffect(() => {
     if (!user) return undefined;
     loadNotifications();
-    loadBell();
     const interval = window.setInterval(loadNotifications, user.role === 'admin' ? 30000 : 10000);
     // Admin pages announce changes (e.g. a module approved) so badges update at once.
     window.addEventListener('admin-counts-changed', loadNotifications);
@@ -202,16 +163,19 @@ export default function Sidebar() {
   useEffect(() => {
     if (!socket) return undefined;
     const handleNotification = (notification) => {
-      // Messages show in the notification bell until the user replies (see awaitingReply), not as a pop-up.
-      // A new chat message, or (for admins) a module sent for approval: just refresh the counts.
-      if (['module_message', 'admin_message', 'module_submitted'].includes(notification.type)) {
+      // Topic chats show as dots on Modules, not as a pop-up. The admin's message
+      // pops up and waits on the dashboard. (For admins: a module sent for approval.)
+      if (['module_message', 'module_submitted'].includes(notification.type)) {
         loadNotifications();
         return;
       }
-      if (!['module_session', 'module_application', 'module_activity', 'module_review'].includes(notification.type)) return;
+      if (notification.type === 'admin_message') {
+        setMessageNotification({ ...notification, moduleTitle: 'iELEVATE', link: '/dashboard' });
+        return;
+      }
+      if (!['module_session', 'module_application', 'module_review'].includes(notification.type)) return;
       setMessageNotification(notification);
       loadNotifications();
-      if (notification.type === 'module_session') loadBell();
     };
     // The user replied in a chat: refresh so its reminder goes away at once.
     const handleMessage = (message) => {
@@ -226,13 +190,6 @@ export default function Sidebar() {
   }, [socket, user]);
 
   useEffect(() => {
-    if (!bellOpen) return undefined;
-    const closeOnEscape = (event) => { if (event.key === 'Escape') setBellOpen(false); };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [bellOpen]);
-
-  useEffect(() => {
     if (!messageNotification) return undefined;
     const timeout = window.setTimeout(() => setMessageNotification(null), 7000);
     return () => window.clearTimeout(timeout);
@@ -244,11 +201,6 @@ export default function Sidebar() {
     .slice(0, 2)
     .join('')
     .toUpperCase();
-  // Not the chat that's open right now on the Modules page.
-  const openChatId = location.pathname === '/modules' ? new URLSearchParams(location.search).get('chat') : null;
-  const waitingChats = [...adminWaiting, ...awaitingReply.filter((item) => String(item.id) !== String(openChatId))];
-  // The bell's red count: chats waiting for a reply and unread session notices.
-  const bellCount = waitingChats.length + bell.unread;
 
   const isAdmin = user?.role === 'admin';
   const isSpecialist = user?.userType === 'specialist';
@@ -256,7 +208,7 @@ export default function Sidebar() {
   const shownLinks = isAdmin ? ADMIN_LINKS : links.filter((l) => !l.beneficiaryOnly || !isSpecialist);
 
   // The count beside a menu item: new applications on Modules, sessions to
-  // answer, modules waiting for an admin's approval. Unread messages are only in the bell.
+  // answer, modules waiting for an admin's approval. Unread topic chats show on Modules.
   function badgeFor(l) {
     if (l.to === '/modules' && incomingMatches > 0) return <span title={`${incomingMatches} new`} className="h-5 px-1.5 rounded-full bg-accent-500 text-brand-900 text-[10px] font-bold flex items-center justify-center">{incomingMatches} new</span>;
     if (l.to === '/sessions' && pendingSessions > 0) return <span className="min-w-5 h-5 px-1 rounded-full bg-amber-500 text-white text-[10px] flex items-center justify-center">{pendingSessions}</span>;
@@ -280,24 +232,19 @@ export default function Sidebar() {
 
   return (
     <aside className="w-60 shrink-0 bg-white border-r border-stone-200 flex flex-col h-screen sticky top-0 print:hidden">
-      {adminChat && <DirectChatPanel conversation={adminChat} subtitle="iELEVATE administrator" onClose={() => setAdminChat(null)} />}
       {/* Rendered on <body>: inside the sticky sidebar it would sit under the page's headers. */}
       {messageNotification && createPortal(
         <button
           type="button"
           onClick={() => {
-            const { type, kind, conversationId } = messageNotification;
-            if (type === 'module_session') navigate(kind === 'post_test_opened' ? `/modules/${messageNotification.moduleId}` : '/sessions');
-            else if (type === 'module_application') navigate(kind === 'accepted' ? `/modules?tab=ongoing&chat=${conversationId}` : kind === 'new' ? '/modules?tab=incoming' : '/modules');
-            else if (type === 'module_activity') navigate(kind === 'reviewed' ? `/modules/${messageNotification.moduleId}` : '/modules?tab=ongoing');
-            else if (type === 'module_review') navigate(kind === 'approved' ? '/modules' : moduleEditorPath(messageNotification.moduleId));
+            if (messageNotification.link) navigate(messageNotification.link);
             setMessageNotification(null);
           }}
           className="pop-enter fixed right-5 top-5 z-50 flex w-[min(24rem,calc(100vw-2rem))] items-start gap-3 rounded-xl bg-slate-900 px-4 py-3 text-left text-white shadow-xl"
           aria-live="polite"
         >
           <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-500 text-brand-900" aria-hidden="true">
-            <LineIcon name={{ module_session: 'calendar', module_application: 'clipboard', module_activity: 'pencil', module_review: messageNotification.kind === 'approved' ? 'check' : 'pencil' }[messageNotification.type] || 'clipboard'} />
+            <LineIcon name={{ module_session: 'calendar', module_application: 'clipboard', module_activity: 'pencil', module_review: messageNotification.kind === 'approved' ? 'check' : 'pencil', admin_message: 'chat' }[messageNotification.type] || 'clipboard'} />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-xs font-semibold">{messageNotification.senderName} · {messageNotification.moduleTitle}</span>
@@ -307,63 +254,6 @@ export default function Sidebar() {
         </button>,
         document.body,
       )}
-      {bellOpen && createPortal(
-        <>
-          <button type="button" aria-label="Close notifications" onClick={() => setBellOpen(false)} className="fixed inset-0 z-40 cursor-default" />
-          <section role="dialog" aria-label="Notifications" className="fixed bottom-4 left-[15.5rem] z-50 flex max-h-[70vh] w-80 flex-col rounded-xl border border-stone-200 bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3">
-              <h2 className="text-sm font-semibold text-slate-900">Notifications</h2>
-              <button type="button" onClick={() => markRead()} disabled={!bell.unread} className="text-xs font-medium text-brand-600 hover:underline disabled:text-slate-400 disabled:no-underline">Mark all read</button>
-            </div>
-            {(waitingChats.length > 0 || bell.items.length > 0) && <div className="overflow-y-auto">
-            {waitingChats.length > 0 && (
-              <section aria-label="Waiting for your reply" className="border-b border-stone-100 bg-accent-50 px-4 pb-1 pt-3">
-                <h3 className="text-[12px] font-bold uppercase tracking-wider text-accent-600">Waiting for your reply</h3>
-                <ul>
-                  {waitingChats.map((chat) => (
-                    <li key={chat.id}>
-                      <button
-                        type="button"
-                        onClick={() => { setBellOpen(false); if (chat.admin) setAdminChat(chat); else navigate(`/modules?tab=${chat.status}&chat=${chat.id}`); }}
-                        className="flex w-full items-start gap-3 border-b border-accent-500/20 py-2.5 text-left last:border-0"
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-semibold text-slate-900">{chat.otherUserName} · <span className="font-normal text-slate-600">{chat.moduleTitle}</span></span>
-                          {chat.lastMessage && <span className="mt-0.5 block line-clamp-2 break-words text-xs italic text-slate-700">&ldquo;{chat.lastMessage}&rdquo;</span>}
-                          <span className="mt-0.5 block text-xs text-slate-500">{waitedFor(String(chat.lastMessageAt).replace(' ', 'T'))} ago</span>
-                        </span>
-                        <span className="shrink-0 rounded-lg bg-accent-500 px-2.5 py-1 text-xs font-bold text-brand-900">Reply</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-            {bell.items.length > 0 && (
-              <ul>
-                {bell.items.map((item) => (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      onClick={() => { if (!item.read) markRead(item.id); setBellOpen(false); navigate('/sessions'); }}
-                      className={`flex w-full gap-2 border-b border-stone-100 px-4 py-3 text-left hover:bg-stone-50 ${item.read ? '' : 'bg-brand-50/50'}`}
-                    >
-                      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${item.read ? 'bg-transparent' : 'bg-accent-500'}`} aria-hidden="true" />
-                      <span className="min-w-0 flex-1">
-                        <span className={`block text-sm ${item.read ? 'text-slate-600' : 'font-medium text-slate-900'}`}>{!item.read && <span className="sr-only">Unread: </span>}{item.body}</span>
-                        <span className="mt-0.5 block text-xs text-slate-500">{waitedFor(String(item.createdAt).replace(' ', 'T'))} ago</span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            </div>}
-            {!waitingChats.length && !bell.items.length && <p className="px-4 py-6 text-center text-sm text-slate-500">No notifications yet. Chats waiting for your reply and face-to-face session notices show here.</p>}
-          </section>
-        </>,
-        document.body,
-      )}
       <div className="px-5 pb-5 pt-6">
         <img src={elevateLogo} alt="iELEVATE" className="h-12 w-auto" />
       </div>
@@ -371,13 +261,6 @@ export default function Sidebar() {
       <nav className="flex-1 px-3 space-y-1">
         <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{heading}</p>
         {shownLinks.filter((l) => !l.apart).map(renderLink)}
-        {!isAdmin && (
-          <button type="button" onClick={() => setBellOpen(!bellOpen)} aria-expanded={bellOpen} className={`${linkClass({ isActive: bellOpen })} w-full text-left`}>
-            {icons.bell}
-            <span className="flex-1">Notifications</span>
-            {bellCount > 0 && <span title={`${bellCount} new`} className="min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center">{bellCount}</span>}
-          </button>
-        )}
         <div className="!mt-3 space-y-1 border-t border-stone-100 pt-3">
           {shownLinks.filter((l) => l.apart).map(renderLink)}
         </div>

@@ -9,6 +9,7 @@ const { logActivity } = require('../lib/activityLog');
 //   Ongoing   = accepted, learning the topic        ('assigned', no certificate)
 //   Completed = certificate issued                  ('assigned' + certificate)
 
+// A pop-up if they're online; link: the page it opens.
 async function notify(app, userId, payload) {
   const io = app.get('io');
   if (io && userId) io.to(`user:${userId}`).emit('notification:new', { type: 'module_application', ...payload });
@@ -138,7 +139,7 @@ async function applyToTopic(req, res) {
   await logActivity({ userId: req.user.id, action: 'applied', moduleId, targetUserId: specialistId });
   const { title, nameOf } = await names(moduleId, req.user.id, specialistId);
   await notify(req.app, specialistId, {
-    kind: 'new', moduleId, moduleTitle: title, senderName: nameOf(req.user.id),
+    kind: 'new', moduleId, moduleTitle: title, senderName: nameOf(req.user.id), link: '/modules?tab=incoming',
     body: `${nameOf(req.user.id)} applied to ${title}`,
   });
   res.json({ success: true, message: `Application sent to ${nameOf(specialistId)}. You'll be told when they accept.` });
@@ -166,7 +167,7 @@ async function cancelApplication(req, res) {
   await logActivity({ userId: req.user.id, action: 'application_cancelled', moduleId, targetUserId: result.specialistId });
   const { title, nameOf } = await names(moduleId, req.user.id);
   await notify(req.app, result.specialistId, {
-    kind: 'withdrawn', moduleId, moduleTitle: title, senderName: nameOf(req.user.id),
+    kind: 'withdrawn', moduleId, moduleTitle: title, senderName: nameOf(req.user.id), link: '/modules',
     body: `${nameOf(req.user.id)} withdrew their application to ${title}`,
   });
   res.json({ success: true, message: 'Application cancelled. You can apply to another specialist.' });
@@ -255,6 +256,7 @@ async function acceptApplication(req, res) {
   const { title, nameOf } = await names(moduleId, req.user.id, beneficiaryId);
   await notify(req.app, beneficiaryId, {
     kind: 'accepted', moduleId, conversationId: result.conversationId, moduleTitle: title, senderName: nameOf(req.user.id),
+    link: `/modules?tab=ongoing&chat=${result.conversationId}`,
     body: `${nameOf(req.user.id)} accepted you in ${title}. Say hello!`,
   });
   res.json({ success: true, message: `${nameOf(beneficiaryId)} is now in your ${title} learners.`, data: { conversationId: result.conversationId } });
@@ -282,7 +284,7 @@ async function declineApplication(req, res) {
   await logActivity({ userId: req.user.id, action: 'declined', moduleId, targetUserId: beneficiaryId });
   const { title, nameOf } = await names(moduleId, req.user.id, beneficiaryId);
   await notify(req.app, beneficiaryId, {
-    kind: 'declined', moduleId, moduleTitle: title, senderName: nameOf(req.user.id),
+    kind: 'declined', moduleId, moduleTitle: title, senderName: nameOf(req.user.id), link: '/modules',
     body: `${nameOf(req.user.id)} can't take you in ${title}. Choose another specialist.`,
   });
   res.json({ success: true, message: `Declined. ${nameOf(beneficiaryId)} can choose another specialist for ${title}.` });

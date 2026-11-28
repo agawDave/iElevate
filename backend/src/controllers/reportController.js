@@ -485,7 +485,7 @@ async function getReport(req, res) {
       stage: pair.completed_at ? 'completed' : pair.assignment_status === 'pending' ? 'incoming' : 'ongoing',
       // Face-to-face hours so far, of the module's training hours (accepted topics).
       faceToFaceHours: hours ? hours.hoursDone : null,
-      hoursNeeded: hours ? hours.hours : null,
+      moduleHours: hours ? hours.hours : null,
       preBand: skill.pre?.band || null,
       preLevel: skill.pre?.level ?? null,
       postBand: skill.post?.band || null,

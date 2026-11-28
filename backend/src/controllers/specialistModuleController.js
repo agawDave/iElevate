@@ -44,10 +44,11 @@ async function contentCounts(topicId, specialistId) {
   const [[row]] = await pool.query(
     `SELECT
        (SELECT COUNT(*) FROM module_resources WHERE module_id = ? AND uploaded_by = ?) AS materials,
-       (SELECT COUNT(*) FROM module_test_questions WHERE module_id = ? AND specialist_id = ?) AS test_questions`,
-    [topicId, specialistId, topicId, specialistId]
+       (SELECT COUNT(*) FROM module_test_questions WHERE module_id = ? AND specialist_id = ? AND test_kind = 'pre') AS pre_n,
+       (SELECT COUNT(*) FROM module_test_questions WHERE module_id = ? AND specialist_id = ? AND test_kind = 'post') AS post_n`,
+    [topicId, specialistId, topicId, specialistId, topicId, specialistId]
   );
-  return { materials: Number(row.materials), testQuestions: Number(row.test_questions) };
+  return { materials: Number(row.materials), testQuestions: { pre: Number(row.pre_n), post: Number(row.post_n) } };
 }
 
 function moduleDto(row) {
@@ -81,7 +82,8 @@ function missingForSubmit(module, counts) {
   if (!module?.title?.trim()) missing.push('a title');
   if ((module?.overview || '').trim().length < LIMITS.minOverview) missing.push('an overview of a sentence or more');
   if (!counts.materials) missing.push('at least one material');
-  if (!counts.testQuestions) missing.push('the pre/post-test questions');
+  if (!counts.testQuestions.pre) missing.push('the pre-test questions');
+  if (!counts.testQuestions.post) missing.push('the post-test questions');
   return missing;
 }
 
@@ -219,7 +221,8 @@ async function listModulesForReview(req, res) {
             lm.title AS topic_title, lm.phase, lm.slug,
             u.id AS specialist_id, u.full_name AS specialist_name, u.avatar_url AS specialist_avatar,
             (SELECT COUNT(*) FROM module_resources r WHERE r.module_id = sm.topic_id AND r.uploaded_by = sm.specialist_id) AS materials,
-            (SELECT COUNT(*) FROM module_test_questions q WHERE q.module_id = sm.topic_id AND q.specialist_id = sm.specialist_id) AS test_questions
+            (SELECT COUNT(*) FROM module_test_questions q WHERE q.module_id = sm.topic_id AND q.specialist_id = sm.specialist_id AND q.test_kind = 'pre') AS pre_n,
+            (SELECT COUNT(*) FROM module_test_questions q WHERE q.module_id = sm.topic_id AND q.specialist_id = sm.specialist_id AND q.test_kind = 'post') AS post_n
      ${from}
      WHERE ${whereSql}
      ORDER BY ${status === 'pending' ? 'sm.submitted_at ASC' : 'COALESCE(sm.reviewed_at, sm.submitted_at) DESC'}, sm.id
@@ -248,7 +251,7 @@ async function listModulesForReview(req, res) {
       phase: row.phase,
       slug: row.slug,
       specialist: { id: row.specialist_id, name: row.specialist_name, avatar: row.specialist_avatar || null },
-      counts: { materials: Number(row.materials), testQuestions: Number(row.test_questions) },
+      counts: { materials: Number(row.materials), testQuestions: { pre: Number(row.pre_n), post: Number(row.post_n) } },
     })),
     pagination: { page, pageSize, total: Number(total), totalPages: Math.max(1, Math.ceil(Number(total) / pageSize)) },
     counts: Object.fromEntries(Object.entries(counts).map(([key, value]) => [key, Number(value) || 0])),
@@ -275,7 +278,10 @@ async function getModuleForReview(req, res) {
        WHERE module_id = ? AND uploaded_by = ? ORDER BY sort_order, id`,
       [row.topic_id, row.specialist_id]
     ),
-    pool.query('SELECT COUNT(*) AS n FROM module_test_questions WHERE module_id = ? AND specialist_id = ?', [row.topic_id, row.specialist_id]),
+    pool.query(
+      `SELECT SUM(test_kind = 'pre') AS pre_n, SUM(test_kind = 'post') AS post_n FROM module_test_questions WHERE module_id = ? AND specialist_id = ?`,
+      [row.topic_id, row.specialist_id]
+    ),
   ]);
   res.json({
     success: true,
@@ -288,7 +294,7 @@ async function getModuleForReview(req, res) {
       reviewerName: row.reviewer_name || null,
       specialist: { id: row.specialist_id, name: row.specialist_name, avatar: row.specialist_avatar || null, email: row.specialist_email },
       materials: materials.map((item) => ({ id: item.id, type: item.resource_type, title: item.title, fileName: item.original_filename, url: item.external_url })),
-      testQuestions: Number(test.n),
+      testQuestions: { pre: Number(test.pre_n) || 0, post: Number(test.post_n) || 0 },
     },
   });
 }
@@ -324,16 +330,18 @@ async function reviewSpecialistModule(req, res) {
     targetUserId: module.specialist_id,
     details: module.title,
   });
-  notify(req.app, module.specialist_id, {
+  const review = {
     type: 'module_review',
     kind: approved ? 'approved' : 'changes',
     moduleId: module.topic_id,
     moduleTitle: module.title,
     senderName: 'Admin',
+    link: approved ? '/modules' : `/teach/${module.topic_id}`,
     body: approved
       ? `Your module “${module.title}” was approved. Beneficiaries can now apply to you for ${module.topic_title}.`
       : `The admin asked for changes to “${module.title}”: ${note}`,
-  });
+  };
+  notify(req.app, module.specialist_id, review);
   res.json({ success: true, message: approved ? 'Module approved' : 'Changes requested' });
 
   // A newly approved module can be the best fit for beneficiaries who were

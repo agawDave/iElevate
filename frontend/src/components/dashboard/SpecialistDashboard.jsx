@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
+import AdminMessages from './AdminMessages';
 import { Link } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 import SpecialistLearnerAnalytics from '../charts/SpecialistLearnerAnalytics';
-import { Card, DashboardBanner, ProgressBar, SessionRow, SideColumn, StatTiles, smallButton } from './DashboardParts';
+import { Card, DashboardBanner, SessionRow, SideColumn, StatTiles, smallButton } from './DashboardParts';
 import { DashboardSkeleton } from '../ui/Skeleton';
 import EmptyState from '../ui/EmptyState';
 import { TopicTile } from '../ui/TopicFace';
 import { avatarTint, initials } from '../../lib/people';
-import { MODULE_STATUS, moduleEditorPath } from '../../lib/moduleStatus';
+import { MODULE_STATUS, moduleEditorPath, testsSummary } from '../../lib/moduleStatus';
 
 // The specialist's dashboard: a navy banner, their numbers, their learners'
 // progress, upcoming sessions, their topics, and the learner trends at the bottom.
@@ -21,7 +22,6 @@ const TILES = [
 
 
 function LearnerRow({ learner }) {
-  const hours = learner.faceToFace;
   const chat = `/modules?tab=ongoing&chat=${learner.conversationId}`;
   const badges = [
     learner.awaitingReply && { label: 'Waiting for your reply', style: 'bg-amber-50 text-amber-800' },
@@ -40,13 +40,7 @@ function LearnerRow({ learner }) {
           {badges.map((badge) => <span key={badge.label} className={`rounded-full px-2 py-0.5 text-[12px] font-semibold ${badge.style}`}>{badge.label}</span>)}
         </div>
         <p className="truncate text-xs text-slate-500">{learner.topic}{testLine ? ` · ${testLine}` : ''}</p>
-        <div className="mt-2 flex items-center gap-3">
-          {hours?.hours > 0 && !hours.onlineOnly ? (
-            <>
-              <ProgressBar done={Math.min(hours.hoursDone, hours.hours)} total={hours.hours} label={`${learner.name}: ${learner.topic} face-to-face hours`} />
-              <span className="shrink-0 text-xs tabular-nums text-slate-600">{hours.hoursDone} of {hours.hours} hours</span>
-            </>
-          ) : <span className="flex-1 text-xs text-slate-500">Online</span>}
+        <div className="mt-2 flex justify-end">
           <Link to={chat} className={smallButton}>Chat{learner.unread ? ` (${learner.unread})` : ''}</Link>
         </div>
       </div>
@@ -74,13 +68,11 @@ function TopicRow({ topic }) {
         </div>
         {MODULE_ACTIONS[status]
           ? <Link to={moduleEditorPath(topic.moduleId)} className="shrink-0 rounded-lg bg-accent-500 px-3 py-1 text-xs font-bold text-brand-900 hover:bg-accent-550">{MODULE_ACTIONS[status]}</Link>
-          : <Link to={`/modules?tests=${topic.moduleId}`} className={smallButton}>Pre/post-test</Link>}
+          : <Link to={`/modules?tests=${topic.moduleId}`} className={smallButton}>Tests</Link>}
       </div>
       <p className="mt-1 flex flex-wrap gap-2 text-[12px] font-semibold">
         <span className={`rounded-full px-2 py-0.5 ${statusInfo.style}`}>{statusInfo.label}</span>
-        {topic.testQuestions
-          ? <span className="rounded-full bg-stone-100 px-2 py-0.5 text-slate-600">Pre/post-test: {topic.testQuestions} question{topic.testQuestions === 1 ? '' : 's'}</span>
-          : <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">No pre/post-test yet</span>}
+        <span className={`rounded-full px-2 py-0.5 ${topic.testQuestions.pre && topic.testQuestions.post ? 'bg-stone-100 text-slate-600' : 'bg-amber-50 text-amber-800'}`}>{testsSummary(topic.testQuestions)}</span>
       </p>
       </div>
     </li>
@@ -103,6 +95,7 @@ export default function SpecialistDashboard({ greeting, firstName }) {
         title={`${greeting}, ${firstName} 👋`}
         subtitle="Here's how your learners are doing."
       />
+      <AdminMessages />
 
       {error && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
       {!data && !error && <DashboardSkeleton />}
@@ -126,8 +119,8 @@ export default function SpecialistDashboard({ greeting, firstName }) {
               <Card plain title="Upcoming sessions" link={{ to: '/sessions', label: 'View all' }}>
                 {data.sessions.length
                   ? <ul className="divide-y divide-stone-100">{data.sessions.map((session) => <SessionRow key={session.id} session={session} person={session.person} />)}</ul>
-                  : <EmptyState icon="calendar" compact title="No face-to-face sessions coming up" action={{ to: '/sessions', label: 'Book a session' }}>
-                    {data.learners.length ? 'Meet your learners face to face, one-on-one or in an open session.' : 'Post an open face-to-face session, or book one once you accept learners.'}
+                  : <EmptyState icon="calendar" compact title="No face-to-face sessions coming up" action={{ to: '/sessions?post', label: 'Set a session' }}>
+                    {data.learners.length ? 'Set a face-to-face session for your learners on a topic. They get a notification.' : 'Once you accept learners, you can set face-to-face sessions for them.'}
                   </EmptyState>}
                 {(data.summary.onlineSessions > 0 || data.summary.faceToFaceHeld > 0) && (
                   <p className="mt-2 text-xs text-slate-500">

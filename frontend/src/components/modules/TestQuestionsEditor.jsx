@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import axiosClient from '../../api/axiosClient';
 import { useConfirm } from '../../context/ConfirmContext';
 import ChoiceInputs, { enterGoesTo, fillChoiceBoxes, filledChoiceCount, packChoices } from './ChoiceInputs';
+import { readQuestionsFile } from '../../lib/wordText';
 
 const EMPTY_FORM = { id: null, prompt: '', options: fillChoiceBoxes(), correctOption: 0 };
 const letter = (index) => String.fromCharCode(65 + index);
+const KIND_NAMES = { pre: 'pre-test', post: 'post-test' };
 
-// Loads a topic's pre-test / post-test questions for the specialist.
+// Loads a topic's questions for the specialist: { pre, post, taken }.
 export function useTestQuestions(moduleId) {
   const [test, setTest] = useState(null);
   const [error, setError] = useState('');
@@ -24,10 +26,11 @@ export function useTestQuestions(moduleId) {
   return { test, error, reload: load };
 }
 
-// The specialist writes the test: multiple-choice questions, one correct choice
-// each. One at a time here, or many at once with Paste questions (onPaste).
-// Rendered with key={moduleId}, so a new topic starts it fresh.
-export default function TestQuestionsEditor({ moduleId, topicTitle, test, onChanged, onPaste, initialNotice = '' }) {
+// The specialist writes one test (kind: pre | post): multiple-choice questions,
+// one correct choice each. One at a time here, or many at once with Paste
+// questions or a Word file (onPaste(text)). Rendered with a key per topic and
+// test, so switching starts it fresh.
+export default function TestQuestionsEditor({ moduleId, kind, topicTitle, test, onChanged, onPaste, initialNotice = '' }) {
   const confirm = useConfirm();
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState('');
@@ -36,8 +39,29 @@ export default function TestQuestionsEditor({ moduleId, topicTitle, test, onChan
   const [saving, setSaving] = useState(false);
   const promptBox = useRef(null);
   const firstChoice = useRef(null);
-  const questions = test?.questions || [];
-  const takenBy = test ? test.taken.pre : 0;
+  const fileInput = useRef(null);
+  const [reading, setReading] = useState(false);
+  const questions = test?.[kind] || [];
+  const takenBy = test ? test.taken[kind] : 0;
+  const name = KIND_NAMES[kind];
+
+  // A Word file of questions goes to Paste questions, to check before adding.
+  async function readFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setReading(true);
+    setError('');
+    try {
+      const text = await readQuestionsFile(file);
+      if (!text.trim()) throw new Error('No text was found in that file.');
+      onPaste(text);
+    } catch (readError) {
+      setError(readError.message || 'Could not read that file.');
+    } finally {
+      setReading(false);
+    }
+  }
 
   const update = (changes) => setForm((previous) => ({ ...previous, ...changes }));
 
@@ -51,7 +75,7 @@ export default function TestQuestionsEditor({ moduleId, topicTitle, test, onChan
     setError('');
     setFormError('');
     setNotice('');
-    const body = { moduleId, prompt: form.prompt, ...choices };
+    const body = { moduleId, kind, prompt: form.prompt, ...choices };
     try {
       const response = form.id
         ? await axiosClient.put(`/elevate/tests/${form.id}`, body)
@@ -68,7 +92,7 @@ export default function TestQuestionsEditor({ moduleId, topicTitle, test, onChan
   }
 
   async function remove(question) {
-    if (!await confirm({ title: 'Remove this question?', message: 'It comes out of the pre-test and the post-test.', confirmLabel: 'Remove', danger: true })) return;
+    if (!await confirm({ title: 'Remove this question?', message: `It comes out of the ${name}.`, confirmLabel: 'Remove', danger: true })) return;
     setError('');
     try {
       const response = await axiosClient.delete(`/elevate/tests/${question.id}`);
@@ -84,11 +108,13 @@ export default function TestQuestionsEditor({ moduleId, topicTitle, test, onChan
   return (
     <div>
       <p className="mb-4 text-sm text-slate-600">
-        Your learners in {topicTitle} answer these before learning (pre-test), and again after their face-to-face sessions, once you open it (post-test).
+        {kind === 'pre'
+          ? `Your learners in ${topicTitle} answer these before they study your materials, to show what they already know.`
+          : `Your learners in ${topicTitle} answer these after studying, once you open their post-test. Ask about what your materials taught.`}
       </p>
       {takenBy > 0 && (
         <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          {takenBy} learner{takenBy === 1 ? ' has' : 's have'} taken the pre-test. Their scores stay as they are. If you change the questions now, their post-test won&apos;t be the same test.
+          {takenBy} learner{takenBy === 1 ? ' has' : 's have'} taken the {name}. Their scores stay as they are; learners who take it later get your changes.
         </p>
       )}
       {notice && <p role="status" className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{notice}</p>}
@@ -97,10 +123,14 @@ export default function TestQuestionsEditor({ moduleId, topicTitle, test, onChan
       {onPaste && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-brand-200 bg-brand-50/50 px-4 py-3">
           <div className="min-w-0 flex-1 basis-60">
-            <p className="text-sm font-semibold text-slate-900">Have your questions in Word or Google Docs?</p>
-            <p className="text-xs text-slate-600">Paste them all at once instead of typing them one by one.</p>
+            <p className="text-sm font-semibold text-slate-900">Have your {name} in Word or Google Docs?</p>
+            <p className="text-xs text-slate-600">Upload the Word file or paste the questions, instead of typing them one by one. Number the questions, letter the choices, and mark the right one in bold, with a *, or an &quot;Answer: b&quot; line.</p>
           </div>
-          <button type="button" onClick={onPaste} className="shrink-0 rounded-lg border border-brand-600 bg-white px-3 py-1.5 text-sm font-semibold text-brand-700 hover:bg-brand-50">Paste questions</button>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <input ref={fileInput} type="file" accept=".docx,.txt" onChange={readFile} className="hidden" aria-hidden="true" tabIndex={-1} />
+            <button type="button" disabled={reading} onClick={() => fileInput.current?.click()} className="rounded-lg border border-brand-600 bg-white px-3 py-1.5 text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-50">{reading ? 'Reading…' : 'Upload Word file'}</button>
+            <button type="button" onClick={() => onPaste()} className="rounded-lg border border-brand-600 bg-white px-3 py-1.5 text-sm font-semibold text-brand-700 hover:bg-brand-50">Paste questions</button>
+          </div>
         </div>
       )}
 
@@ -123,7 +153,7 @@ export default function TestQuestionsEditor({ moduleId, topicTitle, test, onChan
             </ul>
           </li>
         ))}
-        {!questions.length && <li className="rounded-xl border border-dashed border-stone-300 p-4 text-sm text-slate-500">No questions yet. Paste them, or add the first one below. Five to ten questions is a good test.</li>}
+        {!questions.length && <li className="rounded-xl border border-dashed border-stone-300 p-4 text-sm text-slate-500">No {name} questions yet. Upload or paste them, or add the first one below. Five to ten questions is a good test.</li>}
       </ol>
 
       <form onSubmit={save} className="rounded-xl border border-stone-200 bg-stone-50 p-4">

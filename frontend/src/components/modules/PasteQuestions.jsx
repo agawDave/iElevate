@@ -11,8 +11,8 @@ const PLACEHOLDER = '1. Which function adds up a range of numbers?\na. AVERAGE\n
 const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const letter = (index) => String.fromCharCode(65 + index);
 
-// Adds them to the pre/post-test. savedPrompts: the questions it already has; room: how many more fit.
-export default function PasteQuestions({ moduleId, text, onTextChange, savedPrompts, room, takenBy = 0, onBack, onAdded }) {
+// Adds them to the pre-test or the post-test (kind). savedPrompts: the questions it already has; room: how many more fit.
+export default function PasteQuestions({ moduleId, kind, text, onTextChange, savedPrompts, room, takenBy = 0, onBack, onAdded }) {
   const box = useRef(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -39,6 +39,7 @@ export default function PasteQuestions({ moduleId, text, onTextChange, savedProm
     try {
       await axiosClient.post('/elevate/tests/bulk', {
         moduleId,
+        kind,
         questions: ready.map(({ prompt, options, correctOption }) => ({ prompt, options, correctOption })),
       });
       const left = questions.filter((question) => question.problem);
@@ -51,21 +52,21 @@ export default function PasteQuestions({ moduleId, text, onTextChange, savedProm
   }
 
   let note = '';
-  if (tooMany) note = `Your test has room for ${room} more question${room === 1 ? '' : 's'} (30 at most). Remove some from the box.`;
+  if (tooMany) note = `This test has room for ${room} more question${room === 1 ? '' : 's'} (30 at most). Remove some from the box.`;
   else if (needFix) note = needFix === 1 ? 'The one that needs a fix stays in the box, so you can fix it after.' : `The ${needFix} that need a fix stay in the box, so you can fix them after.`;
-  else if (ready.length) note = 'They go after your other test questions.';
+  else if (ready.length) note = 'They go after the questions this test already has.';
 
   return (
     <div>
       <button type="button" onClick={onBack} className="mb-3 text-sm text-slate-500 hover:text-brand-600">← Back to questions</button>
-      <h3 className="text-lg font-semibold text-slate-900">Paste questions</h3>
+      <h3 className="text-lg font-semibold text-slate-900">Add questions to the {kind === 'pre' ? 'pre-test' : 'post-test'}</h3>
       <p className="mb-4 mt-1 text-sm text-slate-600">
-        Copy your quiz from Word, Google Docs or a text file and paste it below. iELEVATE reads it and shows each question here first. Nothing is added until you click Add.
+        Copy your quiz from Word, Google Docs or a text file and paste it below, or check the one read from your Word file. iELEVATE shows each question here first. Nothing is added until you click Add.
       </p>
 
       {takenBy > 0 && (
         <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          {takenBy} learner{takenBy === 1 ? ' has' : 's have'} taken the pre-test. Their scores stay as they are, but if you add questions now, their post-test won&apos;t be the same test.
+          {takenBy} learner{takenBy === 1 ? ' has' : 's have'} taken this test. Their scores stay as they are; learners who take it later get the new questions too.
         </p>
       )}
 
@@ -131,7 +132,7 @@ export default function PasteQuestions({ moduleId, text, onTextChange, savedProm
       <div className="sticky -bottom-4 -mx-5 mt-4 border-t border-stone-200 bg-white px-5 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={add} disabled={saving || !ready.length || tooMany} className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-semibold text-brand-900 hover:bg-accent-550 disabled:opacity-40">
-            {saving ? 'Adding…' : ready.length ? `Add ${count(ready.length, kind.one, kind.many)}` : `Add ${kind.many}`}
+            {saving ? 'Adding…' : ready.length ? `Add ${count(ready.length, 'question', 'questions')}` : 'Add questions'}
           </button>
           <button type="button" onClick={onBack} className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm text-slate-600 hover:bg-stone-50">Cancel</button>
         </div>

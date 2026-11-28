@@ -12,14 +12,16 @@ const ABROAD_MESSAGE = 'You live outside the Philippines, so you learn online on
 //   - online sessions: automatic, one each time a beneficiary takes a topic's
 //     pre-test or post-test or answers an activity
 //     (learning_sessions, recorded in lib/learningSessions.js);
-//   - face-to-face sessions: booked here. One-on-one (a learner and their
-//     specialist request and accept), or open (a specialist posts one that any
-//     beneficiary who needs the topic can join).
+//   - face-to-face sessions: set by the specialist. A session on a topic
+//     (is_open = 1) is for the learners they accepted on it, who are notified
+//     and can say they'll attend; or one-on-one with one learner, who accepts.
+//     Beneficiaries don't book sessions.
 
-// A beneficiary "needs" a topic while it's in their plan (applied, matched or
-// waiting for a match) and they have no certificate for it yet.
-const NEEDS_TOPIC_SQL = (moduleColumn) => `EXISTS (SELECT 1 FROM elevate_module_assignments need
-    WHERE need.module_id = ${moduleColumn} AND need.beneficiary_id = ?)
+// A specialist's sessions on a topic are for the beneficiaries they accepted on
+// it who haven't finished it yet.
+const LEARNER_OF_SQL = (moduleColumn, specialistColumn) => `EXISTS (SELECT 1 FROM elevate_module_assignments mine
+    WHERE mine.module_id = ${moduleColumn} AND mine.specialist_id = ${specialistColumn}
+      AND mine.beneficiary_id = ? AND mine.assignment_status = 'assigned')
   AND NOT EXISTS (SELECT 1 FROM module_certificates done WHERE done.module_id = ${moduleColumn} AND done.user_id = ?)`;
 
 const plural = (n, word, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
@@ -69,8 +71,8 @@ async function freeTimeError(specialistId, userId, startsAt, endsAt) {
 }
 
 // Who a one-on-one session on this module is between when this user books it:
-// a learner with their specialist, or (ELEVATE topics) a specialist with a
-// learner matched to them (learnerId). Returns { module, specialistId,
+// on ELEVATE topics, a specialist with a learner matched to them (learnerId).
+// Beneficiaries don't book; their specialist sets the sessions. Returns { module, specialistId,
 // beneficiaryId }, or { status, message } when they can't book it.
 async function bookingPair(moduleId, userId, learnerId) {
   const [modules] = await pool.query(
@@ -82,13 +84,7 @@ async function bookingPair(moduleId, userId, learnerId) {
   if (module.is_elevate_program) {
     const userType = await userTypeOf(userId);
     if (userType === 'beneficiary') {
-      const [assignments] = await pool.query(
-        `SELECT specialist_id FROM elevate_module_assignments
-         WHERE module_id = ? AND beneficiary_id = ? AND assignment_status = 'assigned'`,
-        [module.id, userId]
-      );
-      if (!assignments[0]?.specialist_id) return { status: 409, message: 'This topic is waiting for a matching specialist' };
-      return { module, specialistId: assignments[0].specialist_id, beneficiaryId: userId };
+      return { status: 403, message: 'Your specialist sets the face-to-face sessions. You get a notification when they do.' };
     }
     if (userType === 'specialist') {
       const [assignments] = await pool.query(
@@ -157,11 +153,11 @@ async function createModuleSession(req, res) {
   res.status(201).json({ success: true, message: 'Session requested. It is booked once they accept it.', data: { sessionId: result.insertId } });
 }
 
-// A specialist posts an open face-to-face session on a topic they teach.
-// Every beneficiary who needs the topic sees it and can join.
+// A specialist sets a face-to-face session on a topic they teach. The learners
+// they accepted on it are notified and can say they'll attend.
 async function createOpenSession(req, res) {
   const me = req.user.id;
-  if (await userTypeOf(me) !== 'specialist') return res.status(403).json({ success: false, message: 'Only specialists can post a face-to-face session.' });
+  if (await userTypeOf(me) !== 'specialist') return res.status(403).json({ success: false, message: 'Only specialists can set a face-to-face session.' });
   const topic = (await teachingTopics(me)).find((row) => Number(row.id) === Number(req.body.moduleId));
   if (!topic) return res.status(403).json({ success: false, message: 'Choose one of the topics you teach.' });
   const input = readSessionInput(req.body);
@@ -177,22 +173,23 @@ async function createOpenSession(req, res) {
   const [interested] = await pool.query(
     `SELECT DISTINCT a.beneficiary_id AS id FROM elevate_module_assignments a
      JOIN users u ON u.id = a.beneficiary_id AND u.status = 'active' AND ${localSql('u')}
-     WHERE a.module_id = ? AND NOT EXISTS (SELECT 1 FROM module_certificates mc WHERE mc.module_id = a.module_id AND mc.user_id = a.beneficiary_id)`,
-    [topic.id]
+     WHERE a.module_id = ? AND a.specialist_id = ? AND a.assignment_status = 'assigned'
+       AND NOT EXISTS (SELECT 1 FROM module_certificates mc WHERE mc.module_id = a.module_id AND mc.user_id = a.beneficiary_id)`,
+    [topic.id, me]
   );
-  await announceToUsers(req.app, interested.map((row) => row.id), { moduleId: topic.id, actorId: me, kind: 'posted', text: 'posted a face-to-face session', startsAt });
+  await announceToUsers(req.app, interested.map((row) => row.id), { moduleId: topic.id, actorId: me, kind: 'posted', text: 'set a face-to-face session', startsAt });
   await logActivity({ userId: me, action: 'session_posted', moduleId: topic.id });
   res.status(201).json({
     success: true,
     message: interested.length
-      ? `Session posted. ${plural(interested.length, 'beneficiary', 'beneficiaries')} who need this topic can see it and join.`
-      : 'Session posted. Beneficiaries who need this topic will see it and can join.',
+      ? `Session set. ${plural(interested.length, 'learner')} on this topic got a notification.`
+      : 'Session set. Learners you accept on this topic will see it.',
     data: { sessionId: result.insertId },
   });
 }
 
-// Beneficiaries: open face-to-face sessions they can join (topics they need).
-// Specialists: the topics they can post one for.
+// Beneficiaries: their specialists' upcoming sessions they haven't said they'll attend.
+// Specialists: the topics they can set one for.
 async function listOpenSessions(req, res) {
   const me = req.user.id;
   const account = await accountOf(me);
@@ -213,7 +210,7 @@ async function listOpenSessions(req, res) {
      JOIN users s ON s.id = ms.specialist_id
      WHERE ms.is_open = 1 AND ms.status = 'confirmed' AND ms.starts_at > NOW()
        AND NOT EXISTS (SELECT 1 FROM module_session_attendees mine WHERE mine.session_id = ms.id AND mine.beneficiary_id = ?)
-       AND ${NEEDS_TOPIC_SQL('ms.module_id')}
+       AND ${LEARNER_OF_SQL('ms.module_id', 'ms.specialist_id')}
      ORDER BY ms.starts_at`,
     [me, me, me]
   );
@@ -246,8 +243,8 @@ async function joinOpenSession(req, res) {
   const account = await accountOf(me);
   if (account?.user_type !== 'beneficiary') return res.status(403).json({ success: false, message: 'Only beneficiaries can join a session.' });
   if (livesAbroad(account.country)) return res.status(403).json({ success: false, message: ABROAD_MESSAGE });
-  const [[needs]] = await pool.query(`SELECT ${NEEDS_TOPIC_SQL('?')} AS ok`, [session.module_id, me, session.module_id, me]);
-  if (!Number(needs.ok)) return res.status(403).json({ success: false, message: 'This session is for beneficiaries who need this topic.' });
+  const [[mine]] = await pool.query(`SELECT ${LEARNER_OF_SQL('?', '?')} AS ok`, [session.module_id, session.specialist_id, me, session.module_id, me]);
+  if (!Number(mine.ok)) return res.status(403).json({ success: false, message: 'This session is for the learners this specialist accepted on the topic.' });
   if (session.seats !== null && Number(session.joined_count) >= Number(session.seats)) {
     return res.status(409).json({ success: false, message: 'This session is full.' });
   }

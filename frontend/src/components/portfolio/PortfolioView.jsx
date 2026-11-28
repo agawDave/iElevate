@@ -162,7 +162,7 @@ export function CertificateActions({ certificate, onFileError }) {
   }
   return (
     <>
-      <button type="button" onClick={() => open(false)} className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-700 print:hidden">View certificate</button>
+      <button type="button" onClick={() => open(false)} className="rounded-lg bg-accent-500 px-3.5 py-2 text-sm font-semibold text-brand-900 hover:bg-accent-550 print:hidden">View certificate</button>
       <button type="button" onClick={() => open(true)} className="rounded-lg border border-stone-300 px-3.5 py-2 text-sm font-semibold text-slate-700 hover:bg-stone-50 print:hidden">Download</button>
     </>
   );

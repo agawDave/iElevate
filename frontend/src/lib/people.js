@@ -8,9 +8,9 @@ export function initials(name = '') {
 const TINTS = [
   'bg-brand-50 text-brand-700',
   'bg-accent-50 text-accent-700',
-  'bg-teal-50 text-teal-700',
-  'bg-violet-50 text-violet-700',
-  'bg-sky-50 text-sky-700',
+  'bg-brand-100 text-brand-600',
+  'bg-accent-100 text-accent-700',
+  'bg-stone-100 text-slate-700',
 ];
 
 export function avatarTint(name = '') {

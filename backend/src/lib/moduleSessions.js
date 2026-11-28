@@ -69,8 +69,7 @@ function whenText(startsAt) {
   return new Date(startsAt).toLocaleString('en-US', { timeZone: 'Asia/Manila', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-// Kept for the notification bell (people who weren't online still see it), and
-// a pop-up for whoever is online now (open sessions: posted, joined, cancelled).
+// A pop-up for whoever is online now (open sessions: posted, joined, cancelled).
 async function announceToUsers(app, userIds, { moduleId, actorId, kind, text, startsAt }) {
   const ids = [...new Set(userIds.map(Number))];
   if (!ids.length) return;
@@ -81,7 +80,7 @@ async function announceToUsers(app, userIds, { moduleId, actorId, kind, text, st
   const name = details?.actor_name || 'Someone';
   // "Naomi A. Bajao accepted your face-to-face session · Google Sheets · Wed, Nov 25, 9:00 AM"
   const body = [`${name} ${text}`, details?.module_title, startsAt && whenText(startsAt)].filter(Boolean).join(' · ').slice(0, 500);
-  await pool.query('INSERT INTO notifications (user_id, body) VALUES ?', [ids.map((userId) => [userId, body])]);
+  const link = kind === 'post_test_opened' ? `/modules/${moduleId}` : '/sessions';
   const io = app.get('io');
   if (!io) return;
   ids.forEach((userId) => io.to(`user:${userId}`).emit('notification:new', {
@@ -91,6 +90,7 @@ async function announceToUsers(app, userIds, { moduleId, actorId, kind, text, st
     moduleTitle: details?.module_title || '',
     senderName: name,
     body,
+    link,
   }));
 }
 

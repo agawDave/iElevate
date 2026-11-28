@@ -4,35 +4,24 @@ import LineIcon from '../ui/LineIcon';
 import { phaseInfo } from '../../lib/topicFaces';
 import { avatarTint, initials } from '../../lib/people';
 
-// How far through the face-to-face hours: a ring with the percentage.
-function ProgressRing({ done, total, completed }) {
-  const percent = completed ? 100 : total ? Math.min(100, Math.round((done / total) * 100)) : 0;
-  const radius = 30;
-  const circumference = 2 * Math.PI * radius;
-  const label = completed ? 'Topic completed' : `${done} of ${total} face-to-face hours (${percent}%)`;
+// A completed topic: a full ring with a check.
+function CompletedRing() {
   return (
-    <div className="relative h-[76px] w-[76px] shrink-0" role="img" aria-label={label} title={label}>
+    <div className="relative h-[76px] w-[76px] shrink-0" role="img" aria-label="Topic completed" title="Topic completed">
       <svg viewBox="0 0 76 76" className="h-full w-full" aria-hidden="true">
-        <circle cx="38" cy="38" r={radius} fill="none" stroke="rgb(255 255 255 / 0.18)" strokeWidth="7" />
-        <circle
-          cx="38" cy="38" r={radius} fill="none" strokeWidth="7" strokeLinecap="round"
-          className={completed ? 'text-emerald-400' : 'text-accent-500'} stroke="currentColor"
-          strokeDasharray={`${(circumference * percent) / 100} ${circumference}`} transform="rotate(-90 38 38)"
-        />
+        <circle cx="38" cy="38" r="30" fill="none" strokeWidth="7" className="text-emerald-400" stroke="currentColor" />
       </svg>
-      <span className="absolute inset-0 flex flex-col items-center justify-center" aria-hidden="true">
-        {completed
-          ? <LineIcon name="check" strokeWidth={3} className="h-7 w-7 text-emerald-300" />
-          : <><span className="text-[17px] font-extrabold leading-none">{percent}%</span><span className="mt-0.5 text-[10px] text-brand-100">{done} of {total} h</span></>}
+      <span className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
+        <LineIcon name="check" strokeWidth={3} className="h-7 w-7 text-emerald-300" />
       </span>
     </div>
   );
 }
 
 // The top of a topic's page: its face (icon, phase colour), title and short
-// description, a ring with the face-to-face hours, their specialist, and the one next thing to do.
+// description, a check once completed, their specialist, and the one next thing to do.
 //   next: { label, onClick } or { label, to }, or { note } when there's nothing to do but wait
-export default function ModuleHero({ module, specialist, faceToFace, completed, chatLink, next }) {
+export default function ModuleHero({ module, specialist, completed, chatLink, next }) {
   const info = phaseInfo(module.phase);
   const firstName = specialist.name.split(' ')[0];
   const nextClass = 'rounded-lg bg-accent-500 px-5 py-2.5 text-sm font-bold text-brand-900 transition hover:bg-accent-550';
@@ -51,7 +40,7 @@ export default function ModuleHero({ module, specialist, faceToFace, completed, 
           {module.topic && module.topic !== module.title && <p className="text-xs font-semibold text-brand-200">ELEVATE topic: {module.topic}</p>}
           {module.description && <p className="mt-1 text-sm text-brand-100">{module.description}</p>}
         </div>
-        {(completed || (faceToFace?.hours > 0 && !faceToFace.onlineOnly)) && <ProgressRing done={faceToFace?.hoursDone || 0} total={faceToFace?.hours || 0} completed={completed} />}
+        {completed && <CompletedRing />}
       </div>
       <div className="relative flex flex-wrap items-center justify-between gap-3 bg-brand-900/55 px-7 py-3.5">
         <div className="flex items-center gap-2.5">

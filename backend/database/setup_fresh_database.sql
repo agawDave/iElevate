@@ -15,7 +15,7 @@
 -- To read one table at a time, see the tables\ folder (one file per table) and
 -- the data\ folder (the reference data). This file is all of them together.
 --
--- Made from the project's own database on 2026-11-27 by export_setup_sql.ps1.
+-- Made from the project's own database on 2026-11-28 by export_setup_sql.ps1.
 
 CREATE DATABASE IF NOT EXISTS `ielevate_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `ielevate_db`;
@@ -23,7 +23,7 @@ SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ============================================================================
--- Tables (33)
+-- Tables (32)
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -465,6 +465,7 @@ CREATE TABLE `module_test_questions` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `module_id` int(10) unsigned NOT NULL,
   `specialist_id` bigint(20) unsigned NOT NULL,
+  `test_kind` enum('pre','post') NOT NULL DEFAULT 'pre',
   `prompt` varchar(1000) NOT NULL,
   `options` text NOT NULL,
   `correct_option` tinyint(3) unsigned NOT NULL,
@@ -473,23 +474,9 @@ CREATE TABLE `module_test_questions` (
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `fk_module_test_question_specialist` (`specialist_id`),
-  KEY `idx_module_test_question_owner` (`module_id`,`specialist_id`,`sort_order`),
+  KEY `idx_module_test_question_owner` (`module_id`,`specialist_id`,`test_kind`,`sort_order`),
   CONSTRAINT `fk_module_test_question_module` FOREIGN KEY (`module_id`) REFERENCES `learning_modules` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_module_test_question_specialist` FOREIGN KEY (`specialist_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ----------------------------------------------------------------------------
--- notifications: The notification bell: face-to-face session notices for each person (requested, accepted, cancelled, posted, joined), and when they read each one.
--- ----------------------------------------------------------------------------
-CREATE TABLE `notifications` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `user_id` bigint(20) unsigned NOT NULL,
-  `body` varchar(500) NOT NULL,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  `read_at` datetime DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `idx_notifications_user` (`user_id`,`id`),
-  CONSTRAINT `fk_notifications_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------

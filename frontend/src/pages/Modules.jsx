@@ -17,7 +17,7 @@ import EmptyState from '../components/ui/EmptyState';
 import { avatarTint, initials } from '../lib/people';
 import { TopicBand } from '../components/ui/TopicFace';
 import { phaseInfo } from '../lib/topicFaces';
-import { moduleEditorPath, moduleStatusOf } from '../lib/moduleStatus';
+import { moduleEditorPath, moduleStatusOf, testsSummary } from '../lib/moduleStatus';
 import { useConfirm } from '../context/ConfirmContext';
 
 // The three stages (project-advisor recommendation):
@@ -79,7 +79,7 @@ function phaseStripe(phase) {
 const STAGE_BADGES = {
   apply: { label: 'Not applied yet', style: 'bg-stone-100 text-slate-600' },
   soon: { label: 'Coming soon', style: 'bg-stone-100 text-slate-600' },
-  queued: { label: 'Next up', style: 'bg-sky-50 text-sky-800' },
+  queued: { label: 'Next up', style: 'bg-accent-50 text-accent-700' },
   incoming: { label: 'Incoming', style: 'bg-amber-50 text-amber-800' },
   ongoing: { label: 'Ongoing', style: 'bg-brand-50 text-brand-600' },
   completed: { label: 'Completed', style: 'bg-emerald-50 text-emerald-700', check: true },
@@ -118,7 +118,7 @@ function SpecialistChoices({ options, topicHours, busy, onApply }) {
                   by {option.name}
                   {/* The card's band already shows the training design's hours. */}
                   {option.module.hours && option.module.hours !== topicHours ? ` · ${option.module.hours} hours` : ''}
-                  {option.module.testQuestions ? ' · pre/post-test' : ''}
+                  {option.module.testQuestions ? ' · pre-test & post-test' : ''}
                 </p>
               )}
               {option.module?.overview && <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">{option.module.overview}</p>}
@@ -138,7 +138,6 @@ function LearnerCard({ module, conversation, stage, options, progress, applyingT
   const specialist = module.specialistName || conversation?.otherUserName;
   const specialistFirst = (specialist || '').split(' ')[0];
   const unread = conversation?.unreadCount || 0;
-  const hours = progress?.faceToFace;
   // No specialist has an approved module for the topic yet.
   const comingSoon = stage === 'apply' && module.assignmentStatus !== 'queued' && module.hasModules === false;
   const badge = STAGE_BADGES[stage === 'apply' && module.assignmentStatus === 'queued' ? 'queued' : comingSoon ? 'soon' : stage];
@@ -154,7 +153,7 @@ function LearnerCard({ module, conversation, stage, options, progress, applyingT
   }
   let status;
   if (stage === 'apply' && module.assignmentStatus === 'queued') {
-    status = <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">{module.waitingReason || 'You can apply once you finish one of your current topics.'}</p>;
+    status = <p className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700">{module.waitingReason || 'You can apply once you finish one of your current topics.'}</p>;
   } else if (comingSoon) {
     status = (
       <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-3 py-2.5">
@@ -175,16 +174,7 @@ function LearnerCard({ module, conversation, stage, options, progress, applyingT
       </p>
     );
   } else if (stage === 'ongoing') {
-    status = hours?.hours > 0 && !hours.onlineOnly ? (
-      <div>
-        <p className="text-xs text-slate-600">Face-to-face: {hours.hoursDone} of {hours.hours} hours</p>
-        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-stone-200" role="progressbar" aria-valuemin={0} aria-valuemax={hours.hours} aria-valuenow={hours.hoursDone} aria-label="Face-to-face hours">
-          <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, Math.round((hours.hoursDone / hours.hours) * 100))}%` }} />
-        </div>
-      </div>
-    ) : (
-      <p className="truncate text-sm text-slate-600">{conversation?.lastMessage || `Accepted. Say hello to ${specialistFirst}!`}</p>
-    );
+    status = <p className="truncate text-sm text-slate-600">{conversation?.lastMessage || `Accepted. Say hello to ${specialistFirst}!`}</p>;
   } else {
     status = <p className="text-sm text-emerald-800">{specialist} issued your certificate{conversation?.completedAt ? ` on ${formatDay(conversation.completedAt)}` : ''}.</p>;
   }
@@ -213,7 +203,6 @@ function LearnerCard({ module, conversation, stage, options, progress, applyingT
               {waiting && <ReplyDot label={`${specialistFirst} is waiting for your reply`} />}
             </button>
           )}
-          {stage === 'ongoing' && !conversation?.learnerOnlineOnly && <Link to={`/sessions?moduleId=${module.id}`} className={buttonStyles.small}>Book a session</Link>}
           <button type="button" onClick={() => onMaterials(module.id)} className={buttonStyles.small}>Materials</button>
         </span>
       </div>
@@ -240,7 +229,7 @@ function ModuleNextStep({ module, status, mine }) {
     return (
       <div className="mb-4 rounded-xl border border-dashed border-stone-300 bg-stone-50 px-4 py-3.5">
         <p className="text-sm font-semibold text-slate-900">Finish your module and submit it</p>
-        <p className="mt-0.5 text-xs leading-5 text-slate-600">It&apos;s saved as a draft. Add your materials and the pre/post-test, then send it to the admin.</p>
+        <p className="mt-0.5 text-xs leading-5 text-slate-600">It&apos;s saved as a draft. Add your materials, the pre-test and the post-test, then send it to the admin.</p>
         <Link to={editor} className={`mt-3 inline-block ${buttonStyles.primary}`}>Continue →</Link>
       </div>
     );
@@ -262,7 +251,8 @@ function ModuleNextStep({ module, status, mine }) {
 
 // One topic the specialist teaches: their own module for it (or the step to
 // create one), and how many learners are at each stage.
-function TeachingTopicCard({ module, counts, waiting = 0, testQuestionCount, onOpenTab, onMaterials, onTests }) {
+function TeachingTopicCard({ module, counts, waiting = 0, testCounts, onOpenTab, onMaterials, onTests }) {
+  const bothTests = testCounts.pre > 0 && testCounts.post > 0;
   const mine = module.myModule;
   const status = mine?.status || 'none';
   const statusInfo = moduleStatusOf(mine);
@@ -301,13 +291,13 @@ function TeachingTopicCard({ module, counts, waiting = 0, testQuestionCount, onO
       {!module.canAddMaterials && <p className="mb-3 text-xs text-slate-500">You no longer teach this topic. Your current learners stay with you.</p>}
       {live && (
         <>
-          <p className={`mb-3 text-xs ${testQuestionCount ? 'text-slate-500' : 'text-amber-800'}`}>
+          <p className={`mb-3 text-xs ${bothTests ? 'text-slate-500' : 'text-amber-800'}`}>
             {mine?.hours ? `${mine.hours} hours · ` : ''}
-            {testQuestionCount ? `pre/post-test: ${testQuestionCount} question${testQuestionCount === 1 ? '' : 's'}` : 'no pre/post-test yet'}
+            {testsSummary(testCounts)}
           </p>
           <div className="mt-auto flex flex-wrap gap-2">
-            <button type="button" onClick={onTests} className={testQuestionCount ? buttonStyles.outline : buttonStyles.primary}>
-              Pre/post-test
+            <button type="button" onClick={onTests} className={bothTests ? buttonStyles.outline : buttonStyles.primary}>
+              Pre-test &amp; post-test
             </button>
             <button type="button" onClick={onMaterials} className={buttonStyles.outline}>Materials</button>
             <Link to={moduleEditorPath(module.id)} className={buttonStyles.outline}>Edit module</Link>
@@ -319,12 +309,16 @@ function TeachingTopicCard({ module, counts, waiting = 0, testQuestionCount, onO
   );
 }
 
-function TopicSection({ title, count, onMaterials, children }) {
+// sessionLink: where the specialist sets a face-to-face session for the topic's learners.
+function TopicSection({ title, count, onMaterials, sessionLink, children }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 px-5 py-3">
         <h3 className="font-semibold text-slate-900">{title} <span className="text-sm font-normal text-slate-500">· {count}</span></h3>
-        <button type="button" onClick={onMaterials} className={buttonStyles.outline}>Materials</button>
+        <div className="flex flex-wrap gap-2">
+          {sessionLink && <Link to={sessionLink} className={buttonStyles.outline}>Set face-to-face session</Link>}
+          <button type="button" onClick={onMaterials} className={buttonStyles.outline}>Materials</button>
+        </div>
       </header>
       <ul className="divide-y divide-stone-100">{children}</ul>
     </section>
@@ -552,20 +546,16 @@ export default function Modules() {
   const topicOf = (moduleId, title, phase) => moduleById.get(String(moduleId)) || { id: moduleId, title, phase };
   // The other person wrote last in an ongoing chat (same rule as the sidebar reminder).
   const waitingForReply = (item) => item.status === 'ongoing' && Boolean(item.lastSenderId) && String(item.lastSenderId) !== String(user?.id);
-  // A specialist's view of one learner on a topic: test scores and face-to-face hours.
+  // A specialist's view of one learner on a topic: test scores and whether the post-test is open.
   const progressOf = (item) => (progressInfo.learners || []).find(
     (entry) => String(entry.moduleId) === String(item.moduleId) && String(entry.beneficiaryId) === String(item.beneficiaryId)
   ) || { faceToFace: null, preTest: null, postTest: null };
-  const hasTest = (item) => (progressInfo.testQuestionCounts?.[item.moduleId] || 0) > 0;
-  // Face-to-face hours done and no post-test yet: the specialist can open it.
+  const testCounts = (moduleId) => progressInfo.testQuestionCounts?.[moduleId] || { pre: 0, post: 0 };
+  const hasTest = (item) => testCounts(item.moduleId).pre + testCounts(item.moduleId).post > 0;
+  // Pre-test taken, no post-test yet: the specialist opens it when the learner is ready.
   const canOpenPost = (item) => {
-    const { faceToFace, postTest } = progressOf(item);
-    return hasTest(item) && !postTest && Boolean(faceToFace?.ready) && !faceToFace.postTestOpened;
-  };
-  const hoursText = (faceToFace) => {
-    if (!faceToFace) return '';
-    if (faceToFace.onlineOnly) return 'Online only';
-    return `Face-to-face: ${faceToFace.hoursDone} of ${faceToFace.hours} hours`;
+    const { faceToFace, preTest, postTest } = progressOf(item);
+    return testCounts(item.moduleId).post > 0 && Boolean(preTest) && !postTest && !faceToFace?.postTestOpened;
   };
   const score = (attempt) => (attempt ? `${attempt.score}/${attempt.total}` : '—');
   // ELEVATE Phase 1, Phase 2, … in curriculum order.
@@ -626,7 +616,7 @@ export default function Modules() {
             module={module}
             counts={countFor(module.id)}
             waiting={conversations.filter((item) => String(item.moduleId) === String(module.id) && waitingForReply(item)).length}
-            testQuestionCount={progressInfo.testQuestionCounts?.[module.id] || 0}
+            testCounts={testCounts(module.id)}
             onOpenTab={(key) => setParams({ tab: key })}
             onMaterials={() => setMaterialsFor(module.id)}
             onTests={() => setTestsFor(module.id)}
@@ -687,7 +677,13 @@ export default function Modules() {
         phaseOrder={phaseOrder}
         layout="stack"
         render={({ module, items: rows }) => (
-          <TopicSection key={module.id} title={module.title} count={`${rows.length} learner${rows.length === 1 ? '' : 's'}`} onMaterials={() => setMaterialsFor(module.id)}>
+          <TopicSection
+            key={module.id}
+            title={module.title}
+            count={`${rows.length} learner${rows.length === 1 ? '' : 's'}`}
+            onMaterials={() => setMaterialsFor(module.id)}
+            sessionLink={tab === 'ongoing' ? `/sessions?post=${module.id}` : null}
+          >
             {rows.map((item) => (
               <LearnerRow
                 key={item.id}
@@ -719,7 +715,6 @@ export default function Modules() {
                 <p className="mt-0.5">
                   {[
                     (hasTest(item) || progressOf(item).preTest) && `Pre-test ${score(progressOf(item).preTest)} → Post-test ${score(progressOf(item).postTest)}`,
-                    tab === 'ongoing' && hoursText(progressOf(item).faceToFace),
                     tab === 'ongoing' && !progressOf(item).postTest && progressOf(item).faceToFace?.postTestOpened && 'post-test open',
                   ].filter(Boolean).join(' · ')}
                 </p>

@@ -2,7 +2,7 @@ const { pool } = require('../config/db');
 const { loadInbox } = require('../lib/conversationInbox');
 const { offeredSql } = require('../lib/programPhases');
 const { livesAbroad } = require('../lib/places');
-const { loadFaceToFace } = require('../lib/moduleTests');
+const { loadFaceToFace, KIND_COUNTS_SQL, kindCounts } = require('../lib/moduleTests');
 
 // The beneficiary's dashboard: their numbers, their topics with progress,
 // and upcoming sessions.
@@ -29,7 +29,7 @@ async function learnerDashboard(req, res) {
        WHERE a.beneficiary_id = ?
        ORDER BY lm.sort_order, lm.id`, [me]),
     loadFaceToFace({ beneficiaryId: me }),
-    q(`SELECT a.module_id, COUNT(tq.id) AS n
+    q(`SELECT a.module_id, ${KIND_COUNTS_SQL('tq')}
        FROM elevate_module_assignments a
        JOIN module_test_questions tq ON tq.module_id = a.module_id AND tq.specialist_id = a.specialist_id
        WHERE a.beneficiary_id = ? AND a.assignment_status = 'assigned'
@@ -51,7 +51,7 @@ async function learnerDashboard(req, res) {
   ]);
 
   const faceToFaceBy = new Map(faceToFace.map((item) => [item.moduleId, item]));
-  const questionsBy = new Map(questionCounts.map((row) => [Number(row.module_id), Number(row.n)]));
+  const questionsBy = kindCounts(questionCounts);
   const attemptOf = (moduleId, kind) => {
     const row = attempts.find((item) => Number(item.module_id) === moduleId && item.test_kind === kind);
     return row ? { score: Number(row.score), total: Number(row.total) } : null;
@@ -63,7 +63,7 @@ async function learnerDashboard(req, res) {
       const moduleId = Number(row.module_id);
       const completed = Boolean(row.certificate_id);
       const hours = faceToFaceBy.get(moduleId) || null;
-      const questionCount = questionsBy.get(moduleId) || 0;
+      const counts = questionsBy.get(moduleId) || { pre: 0, post: 0 };
       const pre = attemptOf(moduleId, 'pre');
       const post = attemptOf(moduleId, 'post');
       const accepted = row.assignment_status === 'assigned';
@@ -79,11 +79,11 @@ async function learnerDashboard(req, res) {
         acceptedAt: accepted ? row.assigned_at : null,
         completedAt: row.issued_at || null,
         faceToFace: hours,
-        test: questionCount || pre || post ? {
+        test: counts.pre || counts.post || pre || post ? {
           pre,
           post,
-          preOpen: accepted && !completed && questionCount > 0 && !pre,
-          postOpen: accepted && !completed && questionCount > 0 && Boolean(pre) && !post && Boolean(hours?.postTestOpened),
+          preOpen: accepted && !completed && counts.pre > 0 && !pre,
+          postOpen: accepted && !completed && counts.post > 0 && Boolean(pre) && !post && Boolean(hours?.postTestOpened),
         } : null,
       };
     });
@@ -132,7 +132,7 @@ async function specialistDashboard(req, res) {
     // Applications waiting for them to accept.
     q("SELECT module_id FROM elevate_module_assignments WHERE specialist_id = ? AND assignment_status = 'pending'", [me]),
     loadFaceToFace({ specialistId: me }),
-    q('SELECT module_id, COUNT(*) AS n FROM module_test_questions WHERE specialist_id = ? GROUP BY module_id', [me]),
+    q(`SELECT module_id, ${KIND_COUNTS_SQL('q')} FROM module_test_questions q WHERE specialist_id = ? GROUP BY module_id`, [me]),
     q('SELECT module_id, beneficiary_id, test_kind, score, total FROM module_test_attempts WHERE specialist_id = ?', [me]),
     q(`SELECT ms.id, ms.module_id, ms.starts_at, ms.ends_at, ms.status, ms.scheduled_by, lm.title AS topic,
               COALESCE(b.full_name, CONCAT('Open session · ', (SELECT COUNT(*) FROM module_session_attendees sa WHERE sa.session_id = ms.id), ' joined')) AS learner
@@ -159,7 +159,7 @@ async function specialistDashboard(req, res) {
 
   const key = (moduleId, beneficiaryId) => `${Number(moduleId)}:${Number(beneficiaryId)}`;
   const faceToFaceBy = new Map(faceToFace.map((item) => [key(item.moduleId, item.beneficiaryId), item]));
-  const questionsBy = new Map(questionCounts.map((row) => [Number(row.module_id), Number(row.n)]));
+  const questionsBy = kindCounts(questionCounts);
   const attemptOf = (moduleId, beneficiaryId, kind) => {
     const row = attempts.find((item) => key(item.module_id, item.beneficiary_id) === key(moduleId, beneficiaryId) && item.test_kind === kind);
     return row ? { score: Number(row.score), total: Number(row.total) } : null;
@@ -168,7 +168,8 @@ async function specialistDashboard(req, res) {
   const learners = inbox.filter((conversation) => Number(conversation.specialistId) === Number(me)).map((conversation) => {
     const k = key(conversation.moduleId, conversation.beneficiaryId);
     const hours = faceToFaceBy.get(k) || null;
-    const hasTest = (questionsBy.get(Number(conversation.moduleId)) || 0) > 0;
+    const counts = questionsBy.get(Number(conversation.moduleId)) || { pre: 0, post: 0 };
+    const hasTest = counts.pre + counts.post > 0;
     const pre = attemptOf(conversation.moduleId, conversation.beneficiaryId, 'pre');
     const post = attemptOf(conversation.moduleId, conversation.beneficiaryId, 'post');
     const completed = conversation.status === 'completed';
@@ -185,10 +186,10 @@ async function specialistDashboard(req, res) {
       awaitingReply: !completed && Boolean(conversation.awaitingSpecialist),
       unread: conversation.unreadCount,
       lastMessageAt: conversation.lastMessageAt,
-      // Face-to-face hours done: the specialist can open the post-test.
-      canOpenPostTest: !completed && hasTest && !post && Boolean(hours?.ready) && !hours.postTestOpened,
-      // Did everything: the post-test, or without a test, the face-to-face hours.
-      readyToComplete: !completed && (hasTest ? Boolean(post) : Boolean(hours?.ready)),
+      // Took the pre-test: the specialist opens the post-test when they're ready.
+      canOpenPostTest: !completed && counts.post > 0 && Boolean(pre) && !post && !hours?.postTestOpened,
+      // Took the post-test: the specialist can mark them completed.
+      readyToComplete: !completed && Boolean(post),
     };
   });
   const current = learners.filter((learner) => !learner.completed);
@@ -209,7 +210,7 @@ async function specialistDashboard(req, res) {
     slug: row.slug,
     title: row.title,
     phase: row.phase,
-    testQuestions: questionsBy.get(Number(row.id)) || 0,
+    testQuestions: questionsBy.get(Number(row.id)) || { pre: 0, post: 0 },
     // Their own module for the topic: null (not created), draft, pending, approved, changes_requested.
     moduleStatus: row.module_status || null,
     moduleTitle: row.module_title || null,

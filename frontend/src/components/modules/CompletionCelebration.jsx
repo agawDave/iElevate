@@ -126,7 +126,9 @@ export default function CompletionCelebration({ userId, learnerName, module, cer
   }
 
   const firstName = (learnerName || '').split(' ')[0];
-  const gain = test?.pre && test?.post ? test.post.score - test.pre.score : null;
+  // The two tests can have different numbers of questions: compare percentages.
+  const percent = (result) => Math.round((result.score / (result.total || 1)) * 100);
+  const gain = test?.pre && test?.post ? percent(test.post) - percent(test.pre) : null;
   return (
     <section
       aria-labelledby="celebration-title"
@@ -166,7 +168,7 @@ export default function CompletionCelebration({ userId, learnerName, module, cer
             <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-[13px] font-bold text-emerald-700">
               {test.pre && <>Pre-test {test.pre.score}/{test.pre.total} <span aria-hidden="true">→</span><span className="sr-only">then</span> </>}
               Post-test {test.post.score}/{test.post.total}
-              {gain > 0 && <> · +{gain}</>}
+              {gain > 0 && <> · +{gain}%</>}
             </p>
           )}
           <CertificateButtons certificate={certificate} />

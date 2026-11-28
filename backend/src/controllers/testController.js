@@ -6,13 +6,14 @@ const { announceToUsers } = require('../lib/moduleSessions');
 const { canAuthor, learnerAssignment, notify } = require('./activityController');
 
 // Pre-test and post-test for a module (tables module_test_questions and module_test_attempts).
-// The specialist writes multiple-choice questions; the learner answers the
-// same questions before the activities and after them. The correct choices
-// never reach the learner until their post-test is done.
+// The specialist writes multiple-choice questions for each test separately
+// (test_kind): the pre-test before learning, the post-test after. The correct
+// choices never reach the learner until their post-test is done.
 const MAX_QUESTIONS = 30;
 const MAX_PROMPT = 1000;
 const MAX_CHOICE = 190;
 const KIND_LABELS = { pre: 'Pre-test', post: 'Post-test' };
+const kindOf = (value) => (KIND_LABELS[value] ? value : null);
 
 function readQuestion(body = {}) {
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
@@ -32,9 +33,11 @@ async function listQuestions(req, res) {
   const moduleId = Number(req.query.moduleId);
   if (!moduleId || !await canAuthor(req.user.id, moduleId)) return res.status(403).json({ success: false, message: "You don't teach this topic." });
   const [rows] = await pool.query(
-    'SELECT id, prompt, options, correct_option FROM module_test_questions WHERE module_id = ? AND specialist_id = ? ORDER BY sort_order, id',
+    'SELECT id, test_kind, prompt, options, correct_option FROM module_test_questions WHERE module_id = ? AND specialist_id = ? ORDER BY sort_order, id',
     [moduleId, req.user.id]
   );
+  const ofKind = (kind) => rows.filter((row) => row.test_kind === kind)
+    .map((row) => ({ id: row.id, prompt: row.prompt, options: parseJson(row.options, []), correctOption: Number(row.correct_option) }));
   const [taken] = await pool.query(
     'SELECT test_kind, COUNT(*) AS n FROM module_test_attempts WHERE module_id = ? AND specialist_id = ? GROUP BY test_kind',
     [moduleId, req.user.id]
@@ -43,7 +46,8 @@ async function listQuestions(req, res) {
   res.json({
     success: true,
     data: {
-      questions: rows.map((row) => ({ id: row.id, prompt: row.prompt, options: parseJson(row.options, []), correctOption: Number(row.correct_option) })),
+      pre: ofKind('pre'),
+      post: ofKind('post'),
       taken: { pre: count('pre'), post: count('post') },
     },
   });
@@ -52,25 +56,29 @@ async function listQuestions(req, res) {
 async function createQuestion(req, res) {
   const moduleId = Number(req.body?.moduleId);
   if (!moduleId || !await canAuthor(req.user.id, moduleId)) return res.status(403).json({ success: false, message: "You don't teach this topic." });
+  const kind = kindOf(req.body?.kind);
+  if (!kind) return res.status(400).json({ success: false, message: 'Choose the pre-test or the post-test.' });
   const input = readQuestion(req.body);
   if (input.error) return res.status(400).json({ success: false, message: input.error });
   const [[count]] = await pool.query(
-    'SELECT COUNT(*) AS total, COALESCE(MAX(sort_order), 0) AS last FROM module_test_questions WHERE module_id = ? AND specialist_id = ?',
-    [moduleId, req.user.id]
+    'SELECT COUNT(*) AS total, COALESCE(MAX(sort_order), 0) AS last FROM module_test_questions WHERE module_id = ? AND specialist_id = ? AND test_kind = ?',
+    [moduleId, req.user.id, kind]
   );
   if (Number(count.total) >= MAX_QUESTIONS) return res.status(400).json({ success: false, message: `A test can have up to ${MAX_QUESTIONS} questions.` });
   const { prompt, options, correct } = input.value;
   const [result] = await pool.query(
-    'INSERT INTO module_test_questions (module_id, specialist_id, prompt, options, correct_option, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
-    [moduleId, req.user.id, prompt, JSON.stringify(options), correct, Number(count.last) + 1]
+    'INSERT INTO module_test_questions (module_id, specialist_id, test_kind, prompt, options, correct_option, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [moduleId, req.user.id, kind, prompt, JSON.stringify(options), correct, Number(count.last) + 1]
   );
   res.status(201).json({ success: true, message: 'Question added.', data: { id: result.insertId } });
 }
 
-// Many questions at once (the specialist pasted a quiz). All are added, or none.
+// Many questions at once (the specialist pasted a quiz or uploaded a Word file). All are added, or none.
 async function createQuestions(req, res) {
   const moduleId = Number(req.body?.moduleId);
   if (!moduleId || !await canAuthor(req.user.id, moduleId)) return res.status(403).json({ success: false, message: "You don't teach this topic." });
+  const kind = kindOf(req.body?.kind);
+  if (!kind) return res.status(400).json({ success: false, message: 'Choose the pre-test or the post-test.' });
   const list = Array.isArray(req.body?.questions) ? req.body.questions : [];
   if (!list.length) return res.status(400).json({ success: false, message: 'Paste at least one question.' });
   if (list.length > MAX_QUESTIONS) return res.status(400).json({ success: false, message: `A test can have up to ${MAX_QUESTIONS} questions.` });
@@ -84,8 +92,8 @@ async function createQuestions(req, res) {
   try {
     await connection.beginTransaction();
     const [[count]] = await connection.query(
-      'SELECT COUNT(*) AS total, COALESCE(MAX(sort_order), 0) AS last FROM module_test_questions WHERE module_id = ? AND specialist_id = ?',
-      [moduleId, req.user.id]
+      'SELECT COUNT(*) AS total, COALESCE(MAX(sort_order), 0) AS last FROM module_test_questions WHERE module_id = ? AND specialist_id = ? AND test_kind = ?',
+      [moduleId, req.user.id, kind]
     );
     const total = Number(count.total);
     const room = MAX_QUESTIONS - total;
@@ -93,11 +101,11 @@ async function createQuestions(req, res) {
       await connection.rollback();
       const message = room > 0
         ? `A test can have up to ${MAX_QUESTIONS} questions. You have ${total}, so you can add ${room} more.`
-        : `Your test already has ${MAX_QUESTIONS} questions, the most it can have.`;
+        : `Your ${KIND_LABELS[kind].toLowerCase()} already has ${MAX_QUESTIONS} questions, the most it can have.`;
       return res.status(400).json({ success: false, message });
     }
-    const rows = values.map(({ prompt, options, correct }, index) => [moduleId, req.user.id, prompt, JSON.stringify(options), correct, Number(count.last) + 1 + index]);
-    await connection.query('INSERT INTO module_test_questions (module_id, specialist_id, prompt, options, correct_option, sort_order) VALUES ?', [rows]);
+    const rows = values.map(({ prompt, options, correct }, index) => [moduleId, req.user.id, kind, prompt, JSON.stringify(options), correct, Number(count.last) + 1 + index]);
+    await connection.query('INSERT INTO module_test_questions (module_id, specialist_id, test_kind, prompt, options, correct_option, sort_order) VALUES ?', [rows]);
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -143,17 +151,18 @@ async function takeTest(req, res) {
   if (assignment.certificate_id) return res.status(409).json({ success: false, message: 'This topic is completed, so the tests are closed.' });
 
   const state = await loadTestState(req.user.id, assignment.id, assignment.specialist_id);
-  if (!state.questions.length) return res.status(404).json({ success: false, message: 'This topic has no test.' });
+  const questions = state.questions[kind];
+  if (!questions.length) return res.status(404).json({ success: false, message: `This topic has no ${KIND_LABELS[kind].toLowerCase()}.` });
   if (state[kind]) return res.status(409).json({ success: false, message: `You already took the ${KIND_LABELS[kind].toLowerCase()}.` });
   if (kind === 'post') {
     if (!state.pre) return res.status(409).json({ success: false, message: 'Take the pre-test first.' });
     const [faceToFace] = await loadFaceToFace({ beneficiaryId: req.user.id, moduleId: assignment.id });
-    if (!faceToFace?.postTestOpened) return res.status(409).json({ success: false, message: 'Your specialist opens the post-test after your face-to-face sessions.' });
+    if (!faceToFace?.postTestOpened) return res.status(409).json({ success: false, message: 'Your specialist opens the post-test when you are ready.' });
   }
 
   const picks = req.body?.answers && typeof req.body.answers === 'object' ? req.body.answers : {};
   const review = [];
-  for (const question of state.questions) {
+  for (const question of questions) {
     const selected = Number(picks[question.id]);
     if (!Number.isInteger(selected) || selected < 0 || selected >= question.options.length) {
       return res.status(400).json({ success: false, message: 'Answer every question before you submit.' });
@@ -194,8 +203,7 @@ async function takeTest(req, res) {
   });
 }
 
-// Specialists: open a learner's post-test, once their face-to-face sessions
-// reach the module's training hours (lib/moduleTests.js).
+// Specialists: open a learner's post-test whenever they judge the learner ready.
 async function openPostTest(req, res) {
   const moduleId = Number(req.params.moduleId);
   const beneficiaryId = Number(req.params.beneficiaryId);
@@ -204,11 +212,8 @@ async function openPostTest(req, res) {
   const [[certificate]] = await pool.query('SELECT id FROM module_certificates WHERE user_id = ? AND module_id = ?', [beneficiaryId, moduleId]);
   if (certificate) return res.status(409).json({ success: false, message: 'This topic is completed, so the tests are closed.' });
   if (faceToFace.postTestOpened) return res.json({ success: true, message: 'The post-test is already open.' });
-  if (!faceToFace.ready) {
-    return res.status(409).json({ success: false, message: `Their face-to-face sessions come to ${faceToFace.hoursDone} of ${faceToFace.hours} hours. Open the post-test once they reach ${faceToFace.hours}.` });
-  }
   const state = await loadTestState(beneficiaryId, moduleId, req.user.id);
-  if (!state.questions.length) return res.status(409).json({ success: false, message: 'Add your pre/post-test questions first.' });
+  if (!state.questions.post.length) return res.status(409).json({ success: false, message: 'Add your post-test questions first.' });
   await pool.query(
     `INSERT INTO module_connections (beneficiary_id, module_id, post_test_opened_at) VALUES (?, ?, NOW())
      ON DUPLICATE KEY UPDATE post_test_opened_at = NOW()`,

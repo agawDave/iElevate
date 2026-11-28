@@ -5,7 +5,7 @@ import ModulesTabs from '../../components/admin/ModulesTabs';
 import { SkeletonLines } from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
 import LineIcon from '../../components/ui/LineIcon';
-import { MODULE_STATUS, contentSummary } from '../../lib/moduleStatus';
+import { MODULE_STATUS, contentSummary, testsSummary } from '../../lib/moduleStatus';
 
 const TABS = [
   { value: 'pending', label: 'Waiting' },
@@ -82,7 +82,7 @@ function ModuleReview({ moduleId, onReviewed }) {
           </ul>
         ) : <p className="text-slate-500">None</p>}
       </Section>
-      <Section title="Pre/post-test">{module.testQuestions ? `${module.testQuestions} question${module.testQuestions === 1 ? '' : 's'}` : 'None'}</Section>
+      <Section title="Pre-test & post-test">{testsSummary(module.testQuestions)}</Section>
 
       {module.status === 'pending' && (
         <div className="pt-4">
@@ -90,7 +90,7 @@ function ModuleReview({ moduleId, onReviewed }) {
             <label htmlFor="review-note" className="text-sm font-medium text-slate-700">
               Note to the specialist <span className="font-normal text-slate-500">(needed to ask for changes)</span>
             </label>
-            <textarea id="review-note" value={note} onChange={(event) => setNote(event.target.value)} rows={3} maxLength={1000} className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200" placeholder="e.g. Please add the pre/post-test before resubmitting." />
+            <textarea id="review-note" value={note} onChange={(event) => setNote(event.target.value)} rows={3} maxLength={1000} className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200" placeholder="e.g. Please add the post-test before resubmitting." />
             {error && <p role="alert" className="mt-2 text-sm text-red-600">{error}</p>}
             <div className="mt-3 flex flex-wrap gap-2">
               <button type="button" disabled={Boolean(busy)} onClick={() => review('approved')} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">{busy === 'approved' ? 'Approving…' : 'Approve'}</button>

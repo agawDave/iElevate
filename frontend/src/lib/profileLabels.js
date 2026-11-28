@@ -14,7 +14,7 @@ export const BAND_LABELS = { beginner: 'Beginner', developing: 'Developing', pro
 
 export const BAND_STYLES = {
   beginner: 'bg-amber-50 text-amber-800',
-  developing: 'bg-sky-50 text-sky-800',
+  developing: 'bg-brand-50 text-brand-700',
   proficient: 'bg-emerald-50 text-emerald-800',
   strong: 'bg-emerald-100 text-emerald-900',
 };

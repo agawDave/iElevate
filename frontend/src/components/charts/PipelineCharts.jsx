@@ -1,17 +1,18 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
-// Learner-pipeline charts. Colors are fixed per category (validated with the
-// dataviz palette checker on the white card surface: CVD-safe all-pairs;
-// aqua is under 3:1 contrast, so every chart ships direct labels + a table).
+// Learner-pipeline charts. Colors are fixed per category, from the site's
+// orange / navy / green (validated with the dataviz palette checker on the white
+// card surface: CVD-safe all-pairs; orange is under 3:1 contrast, so every chart
+// ships direct labels + a table).
 export const PIPELINE_SERIES = [
-  { key: 'incoming', label: 'Incoming', color: '#eb6834' },
-  { key: 'ongoing', label: 'Ongoing', color: '#2a78d6' },
-  { key: 'completed', label: 'Completed', color: '#1baf7a' },
+  { key: 'incoming', label: 'Incoming', color: '#FE8101' },
+  { key: 'ongoing', label: 'Ongoing', color: '#2563A8' },
+  { key: 'completed', label: 'Completed', color: '#1E7A4C' },
 ];
 
 export const TREND_SERIES = [
-  { key: 'newMatches', label: 'New applications', color: '#eb6834' },
-  { key: 'completed', label: 'Completed', color: '#1baf7a' },
+  { key: 'newMatches', label: 'New applications', color: '#FE8101' },
+  { key: 'completed', label: 'Completed', color: '#1E7A4C' },
 ];
 
 const INK = { primary: '#14202B', secondary: '#4A5866', muted: '#7D8996', grid: '#EDF1F4', axis: '#D9DFE5', surface: '#FFFFFF' };

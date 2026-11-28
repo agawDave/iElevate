@@ -83,15 +83,6 @@ export function StatTiles({ tiles, values }) {
 
 export const smallButton = 'shrink-0 rounded-lg bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100';
 
-export function ProgressBar({ done, total, label }) {
-  const percent = total ? Math.round((done / total) * 100) : 0;
-  return (
-    <div className="h-2 flex-1 overflow-hidden rounded-full bg-stone-200" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done} aria-label={label}>
-      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${percent}%` }} />
-    </div>
-  );
-}
-
 // person = the other person in the session (the specialist for a learner, the learner for a specialist).
 export function SessionRow({ session, person }) {
   const starts = new Date(session.startsAt);

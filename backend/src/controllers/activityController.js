@@ -1,6 +1,6 @@
 const { pool } = require('../config/db');
 const { removeActivityFile } = require('../middleware/activityFileUpload');
-const { loadTestState, loadFaceToFace, attemptDto, attemptReview } = require('../lib/moduleTests');
+const { loadTestState, loadFaceToFace, attemptDto, attemptReview, KIND_COUNTS_SQL, kindCounts } = require('../lib/moduleTests');
 
 // A learner's module page and progress on their topics, and the specialist's
 // view of their learners: pre-test and post-test scores and face-to-face hours.
@@ -44,7 +44,7 @@ async function canAuthor(specialistId, moduleId) {
 // recommendation they asked for), and how many test questions each topic has.
 async function specialistSummary(req, res) {
   const [questionCounts] = await pool.query(
-    'SELECT module_id, COUNT(*) AS total FROM module_test_questions WHERE specialist_id = ? GROUP BY module_id',
+    `SELECT module_id, ${KIND_COUNTS_SQL('q')} FROM module_test_questions q WHERE specialist_id = ? GROUP BY module_id`,
     [req.user.id]
   );
   const [attempts] = await pool.query(
@@ -73,7 +73,8 @@ async function specialistSummary(req, res) {
         postTest: attemptOf(item, 'post'),
         recommendation: recommendationOf(item),
       })),
-      testQuestionCounts: Object.fromEntries(questionCounts.map((row) => [row.module_id, Number(row.total)])),
+      // moduleId → { pre, post }: how many questions each test has.
+      testQuestionCounts: Object.fromEntries(kindCounts(questionCounts)),
     },
   });
 }
@@ -107,16 +108,19 @@ async function learnerAssignment(beneficiaryId, moduleId) {
 // the correct answers only after the post-test. null when there's no test.
 async function learnerTestView(beneficiaryId, assignment, faceToFace, completed) {
   const state = await loadTestState(beneficiaryId, assignment.id, assignment.specialist_id);
-  if (!state.questions.length && !state.pre && !state.post) return null;
-  const preOpen = !completed && !state.pre && state.questions.length > 0;
-  const postOpen = !completed && Boolean(state.pre) && !state.post && state.questions.length > 0 && Boolean(faceToFace?.postTestOpened);
+  const counts = { pre: state.questions.pre.length, post: state.questions.post.length };
+  if (!counts.pre && !counts.post && !state.pre && !state.post) return null;
+  const preOpen = !completed && !state.pre && counts.pre > 0;
+  const postOpen = !completed && Boolean(state.pre) && !state.post && counts.post > 0 && Boolean(faceToFace?.postTestOpened);
+  const open = preOpen ? 'pre' : postOpen ? 'post' : null;
   return {
-    questionCount: state.questions.length,
+    counts,
     pre: attemptDto(state.pre),
     post: attemptDto(state.post),
     preOpen,
     postOpen,
-    questions: preOpen || postOpen ? state.questions.map(({ id, prompt, options }) => ({ id, prompt, options })) : [],
+    // The questions of the test that can be taken now.
+    questions: open ? state.questions[open].map(({ id, prompt, options }) => ({ id, prompt, options })) : [],
     review: state.post ? attemptReview(state.post) : null,
   };
 }
@@ -142,12 +146,36 @@ async function nextTopicFor(beneficiaryId, finishedModuleId) {
   return row ? { id: row.module_id, title: row.title, status: row.assignment_status, specialist: row.specialist_name || null } : null;
 }
 
-// The module page: the topic, the learner's tests and their face-to-face hours.
+// The specialist's upcoming face-to-face sessions on the topic, and whether
+// this learner said they'll attend (joined).
+async function upcomingTopicSessions(beneficiaryId, moduleId, specialistId) {
+  const [rows] = await pool.query(
+    `SELECT ms.id, ms.starts_at, ms.ends_at, ms.meeting_link, ms.seats,
+            (SELECT COUNT(*) FROM module_session_attendees sa WHERE sa.session_id = ms.id) AS joined_count,
+            EXISTS (SELECT 1 FROM module_session_attendees mine WHERE mine.session_id = ms.id AND mine.beneficiary_id = ?) AS joined
+     FROM module_sessions ms
+     WHERE ms.module_id = ? AND ms.specialist_id = ? AND ms.is_open = 1 AND ms.status = 'confirmed' AND ms.starts_at > NOW()
+     ORDER BY ms.starts_at`,
+    [beneficiaryId, moduleId, specialistId]
+  );
+  return rows.map((row) => {
+    const seats = row.seats === null ? null : Number(row.seats);
+    const joinedCount = Number(row.joined_count);
+    return {
+      moduleSessionId: row.id, startsAt: row.starts_at, endsAt: row.ends_at, place: row.meeting_link,
+      seats, joinedCount, joined: Boolean(Number(row.joined)), full: seats !== null && joinedCount >= seats,
+    };
+  });
+}
+
+// The module page: the topic, the learner's tests, and the specialist's
+// upcoming face-to-face sessions (none once completed, or for online-only learners).
 async function learnerModule(req, res) {
   const assignment = await learnerAssignment(req.user.id, Number(req.params.moduleId));
   if (!assignment) return res.status(403).json({ success: false, message: 'This module opens once a specialist accepts your application.' });
   const completed = Boolean(assignment.certificate_id);
   const [faceToFace = null] = await loadFaceToFace({ beneficiaryId: req.user.id, moduleId: assignment.id });
+  const sessions = completed || faceToFace?.onlineOnly ? [] : await upcomingTopicSessions(req.user.id, assignment.id, assignment.specialist_id);
   res.json({
     success: true,
     data: {
@@ -174,6 +202,7 @@ async function learnerModule(req, res) {
       nextTopic: completed ? await nextTopicFor(req.user.id, assignment.id) : null,
       test: await learnerTestView(req.user.id, assignment, faceToFace, completed),
       faceToFace,
+      sessions,
     },
   });
 }
@@ -182,7 +211,7 @@ async function learnerModule(req, res) {
 // whether a test is waiting so the card's main button can say so.
 async function learnerProgress(req, res) {
   const [questionRows] = await pool.query(
-    `SELECT a.module_id, COUNT(tq.id) AS n FROM elevate_module_assignments a
+    `SELECT a.module_id, ${KIND_COUNTS_SQL('tq')} FROM elevate_module_assignments a
      JOIN module_test_questions tq ON tq.module_id = a.module_id AND tq.specialist_id = a.specialist_id
      WHERE a.beneficiary_id = ? AND a.assignment_status = 'assigned'
      GROUP BY a.module_id`,
@@ -195,17 +224,17 @@ async function learnerProgress(req, res) {
      WHERE t.beneficiary_id = ?`,
     [req.user.id]
   );
-  const hasTest = new Set(questionRows.filter((row) => Number(row.n) > 0).map((row) => Number(row.module_id)));
+  const countsBy = kindCounts(questionRows);
   const took = (moduleId, kind) => attemptRows.some((row) => Number(row.module_id) === moduleId && row.test_kind === kind);
   const topics = await loadFaceToFace({ beneficiaryId: req.user.id });
   res.json({
     success: true,
     data: Object.fromEntries(topics.map((item) => {
-      const test = hasTest.has(item.moduleId);
+      const counts = countsBy.get(item.moduleId) || { pre: 0, post: 0 };
       return [item.moduleId, {
         faceToFace: item,
-        preTestOpen: test && !took(item.moduleId, 'pre'),
-        postTestOpen: test && took(item.moduleId, 'pre') && !took(item.moduleId, 'post') && item.postTestOpened,
+        preTestOpen: counts.pre > 0 && !took(item.moduleId, 'pre'),
+        postTestOpen: counts.post > 0 && took(item.moduleId, 'pre') && !took(item.moduleId, 'post') && item.postTestOpened,
       }];
     })),
   });

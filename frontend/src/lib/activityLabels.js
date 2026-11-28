@@ -13,7 +13,7 @@ export const ACTIVITY_LABELS = {
   session_cancelled: 'Cancelled a session',
   session_completed: 'Marked a session done',
   session_no_show: 'Marked a session missed',
-  session_posted: 'Posted a face-to-face session',
+  session_posted: 'Set a face-to-face session',
   session_joined: 'Joined a face-to-face session',
   session_left: 'Left a face-to-face session',
   activity_created: 'Added an activity',
@@ -48,7 +48,7 @@ export const ACTIVITY_GROUP_STYLES = {
   access: 'bg-stone-400',
   stage: 'bg-accent-500',
   talk: 'bg-brand-500',
-  session: 'bg-violet-500',
-  learning: 'bg-sky-500',
+  session: 'bg-brand-300',
+  learning: 'bg-accent-200',
   done: 'bg-emerald-500',
 };

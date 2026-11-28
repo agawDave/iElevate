@@ -8,17 +8,19 @@ import { StackedTopicBars, WeeklyTrendChart } from '../../components/charts/Pipe
 import { BAND_LABELS, SEX_LABELS } from '../../lib/profileLabels';
 import { csvDate, downloadCsv } from '../../lib/csv';
 
-// Colors from the validated chart palette (CVD-safe; below 3:1 contrast on
-// white, so every chart keeps direct labels and a table view).
+// Chart colors from the site's navy / orange / green, plus a light blue and a
+// rose for the five-line chart (validated with the dataviz palette checker,
+// all pairs; some are below 3:1 contrast on white, so every chart keeps direct
+// labels and a table view).
 const PARTICIPATION_SERIES = [
-  { key: 'users', label: 'Users', color: '#6250d6' },
-  { key: 'sessions', label: 'Sessions', color: '#2a78d6' },
-  { key: 'certificates', label: 'Completed modules', color: '#1baf7a' },
+  { key: 'users', label: 'Users', color: '#2563A8' },
+  { key: 'sessions', label: 'Sessions', color: '#FE8101' },
+  { key: 'certificates', label: 'Completed modules', color: '#1E7A4C' },
 ];
 const COMPLETED_SERIES = [
-  { key: 'certificates', label: 'Certificates issued', color: '#1baf7a' },
-  { key: 'sessions', label: 'Online sessions', color: '#6250d6' },
-  { key: 'faceToFace', label: 'Face-to-face sessions', color: '#eda100' },
+  { key: 'certificates', label: 'Certificates issued', color: '#1E7A4C' },
+  { key: 'sessions', label: 'Online sessions', color: '#FE8101' },
+  { key: 'faceToFace', label: 'Face-to-face sessions', color: '#2563A8' },
 ];
 const PRESETS = [
   { key: '7d', label: 'Last 7 days' },
@@ -32,11 +34,11 @@ const PRESETS = [
 const STAGE_LABELS = { incoming: 'Incoming', ongoing: 'Ongoing', completed: 'Completed' };
 // What happened with each topic in the period (the Progress chart).
 const PERIOD_SERIES = [
-  { key: 'applied', label: 'Applied', color: '#eb6834' },
-  { key: 'accepted', label: 'Accepted', color: '#2a78d6' },
-  { key: 'completed', label: 'Completed', color: '#1baf7a' },
-  { key: 'preTests', label: 'Pre-test', color: '#eda100' },
-  { key: 'postTests', label: 'Post-test', color: '#6250d6' },
+  { key: 'applied', label: 'Applied', color: '#FE8101' },
+  { key: 'accepted', label: 'Accepted', color: '#2563A8' },
+  { key: 'completed', label: 'Completed', color: '#1E7A4C' },
+  { key: 'preTests', label: 'Pre-test', color: '#6BA6E8' },
+  { key: 'postTests', label: 'Post-test', color: '#D14D72' },
 ];
 const TEST_LABELS = { pre: 'Pre-test', post: 'Post-test' };
 const count = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -391,7 +393,7 @@ export default function AdminReports() {
                 { label: 'Stage', value: (row) => STAGE_LABELS[row.stage] },
                 { label: 'In this period', value: (row) => periodText(row.period) },
                 { label: 'Face-to-face hours', value: (row) => row.faceToFaceHours ?? '' },
-                { label: 'Hours needed', value: (row) => row.hoursNeeded ?? '' },
+                { label: 'Module hours', value: (row) => row.moduleHours ?? '' },
                 { label: 'Pre-test score', value: (row) => (row.preTest ? `${row.preTest.score}/${row.preTest.total}` : '') },
                 { label: 'Post-test score', value: (row) => (row.postTest ? `${row.postTest.score}/${row.postTest.total}` : '') },
                 { label: 'Pre-assessment before', value: (row) => BAND_LABELS[row.preBand] || '' },
@@ -430,7 +432,7 @@ export default function AdminReports() {
                 { label: 'Specialist', render: (row) => row.specialist || '—' },
                 { label: 'Stage', render: (row) => STAGE_LABELS[row.stage] },
                 { label: 'In this period', render: (row) => <span className="text-xs text-slate-600">{periodText(row.period)}</span> },
-                { label: 'Face-to-face', align: 'right', render: (row) => (row.hoursNeeded ? `${row.faceToFaceHours}/${row.hoursNeeded} h` : '—') },
+                { label: 'Face-to-face', align: 'right', render: (row) => (row.faceToFaceHours ? `${row.faceToFaceHours} h` : '—') },
                 { label: 'Topic test', align: 'right', render: (row) => (row.preTest ? `${row.preTest.score}/${row.preTest.total} → ${row.postTest ? `${row.postTest.score}/${row.postTest.total}` : '—'}` : '—') },
               ]}
             />

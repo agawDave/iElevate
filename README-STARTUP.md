@@ -186,8 +186,8 @@ other tabs list learners, grouped by topic.
 
 - **Materials:** the topic's materials. Specialists add or remove their own there, or
   use **Teaching materials** for any topic they teach.
-- **Book a session:** opens the booking form on the Sessions page. Only the other
-  person can accept a session, and only the specialist marks it done.
+- **Book a session** (specialists only): proposes a one-on-one face-to-face session
+  to that learner, who accepts it on their Sessions page. Only the specialist marks it done.
 - **Specialists:** **Mark as completed** (certificate upload), View / Replace
   certificate, and Reopen topic.
 
@@ -245,34 +245,52 @@ changes their answer, the reply and rubric are cleared and it waits to be read a
 
 ### Pre-test and post-test
 
-Each module can have a pre-test and a post-test. Both use the same questions, so the
-before and after scores show what the learner gained.
+Each module has a pre-test and a post-test, each with its own questions. The before and
+after scores (as percentages) show what the learner gained.
 
-- **Specialists** write the test in **Tests & activities → Pre-test & post-test → Edit
-  questions**. Questions are multiple choice, 2 to 4 choices each, up to 30 questions.
-  Each specialist writes their own test for the topics they teach.
-- **Learners** see the steps **Pre-test → activities → Post-test** on the module page:
-  - The activities open once the pre-test is done.
-  - The post-test opens once all activities are done.
+- **Specialists** write them in **Modules → Pre-test & post-test** on a topic card. The
+  panel has a **Pre-test** tab and a **Post-test** tab. Questions are multiple choice,
+  2 to 4 choices each, up to 30 per test. Each specialist writes their own tests for the
+  topics they teach, and a module needs both before it can be sent for approval.
+  - Type questions one at a time, **Paste questions**, or **Upload Word file** (.docx or
+    .txt). The file is read in the browser and shown in the paste preview to check
+    before adding. Number the questions, letter the choices (a. b. c. d.), and mark the
+    right one in bold or highlight, with a `*`, or with an `Answer: b` line.
+- **Learners** see the steps **Pre-test → Materials → Post-test** on the module page:
+  - **Materials** are the videos, links and files their specialist added.
+  - The post-test opens when the specialist presses **Open post-test** on the learner's
+    row in Modules (after the learner's pre-test). Face-to-face hours aren't needed.
   - Each test is taken once, and the learner sees their score.
+  - Below the steps, **Face-to-face sessions** lists the sessions the specialist set
+    on the topic. The learner says **I'll attend** to save a seat.
   - The correct answers are never sent to the learner's browser until after the
     post-test, which then shows each question with the right answer and the
     before → after score.
 - **Specialists see the results:**
   - learner rows show "Pre-test 2/4 → Post-test 4/4";
-  - **Answers** shows which questions they got right before and after;
   - a pop-up comes when a learner takes a test;
   - **Mark as completed** shows the scores, and reminds the specialist if the
-    post-test or some activities aren't done. They can still issue the certificate.
+    post-test isn't done. They can still issue the certificate.
+- **Face-to-face sessions:** only specialists set them. **Set face-to-face session**
+  on a topic in Modules (or on the Sessions page) notifies the learners they accepted
+  on that topic. Beneficiaries can't book sessions, and those outside the Philippines
+  learn online only.
 - **Locks and history:**
   - The tests close once the topic is completed.
   - Each attempt keeps a copy of the questions as they were, so editing or removing
     questions later doesn't change scores already given.
-  - A topic with no questions has no tests, and its activities are open from the
-    start.
+  - The post-test can only be opened once it has questions.
 - **Admins** see the scores in Reports → Progress: the average before → after per
   topic, and each learner's scores, also in the CSV. The Activity log records each
   test taken, for example "Pre-test · 2 of 4".
+
+### Pop-ups and messages from the admin
+
+There's no notifications page: each thing shows where it belongs (applications on
+Modules → Incoming, sessions on Sessions, unread topic chats as dots on Modules). When
+something happens while someone is online, a short pop-up appears in the corner and
+opens the right page. A message from the admin shows as a **Message from the iELEVATE
+admin** card on the person's dashboard, with **Reply**.
 
 ### Certificates
 

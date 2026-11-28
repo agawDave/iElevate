@@ -106,7 +106,6 @@ export default function ModuleChatPanel({ conversation, module, isSpecialist, on
 
   const button = 'rounded-lg px-3 py-2 text-xs font-semibold';
   const outline = `${button} border border-stone-300 text-slate-700 hover:bg-stone-50`;
-  const bookLink = `/sessions?moduleId=${module.id}${isSpecialist ? `&learner=${conversation.beneficiaryId}` : ''}`;
 
   return (
     <section className="flex h-full min-h-0 flex-col" aria-label={`Chat with ${otherName}`}>
@@ -126,7 +125,7 @@ export default function ModuleChatPanel({ conversation, module, isSpecialist, on
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
           {onViewProfile && <button type="button" onClick={onViewProfile} className={outline}>Profile</button>}
           <button type="button" onClick={onOpenMaterials} className={outline}>Materials</button>
-          {!completed && !conversation.learnerOnlineOnly && <Link to={bookLink} className={outline}>Book a session</Link>}
+          {isSpecialist && !completed && !conversation.learnerOnlineOnly && <Link to={`/sessions?moduleId=${module.id}&learner=${conversation.beneficiaryId}`} className={outline}>Book a session</Link>}
           {!isSpecialist && completed && conversation.certificateHasFile && (
             <button type="button" onClick={viewCertificate} className={`${button} bg-emerald-600 text-white hover:bg-emerald-700`}>View your certificate</button>
           )}

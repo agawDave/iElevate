@@ -116,7 +116,7 @@ function SessionRow({ session, onUpdateStatus, onLeave, quiet = false }) {
         ? { label: 'Needs your answer', style: 'bg-amber-100 text-amber-900 border-amber-300' }
         : SESSION_STATUS[session.status] || SESSION_STATUS.pending;
   const who = session.isOpen
-    ? (session.isSpecialist ? 'Open to beneficiaries who need this topic' : `with ${session.otherUserName} · open session`)
+    ? (session.isSpecialist ? 'For your learners on this topic' : `with ${session.otherUserName} · group session`)
     : `${session.isSpecialist ? 'Teaching' : 'with'} ${session.otherUserName || `User #${session.otherUserId}`}`;
 
   return (
@@ -181,7 +181,7 @@ function OpenSessionRow({ session, onJoin, joining }) {
             onClick={() => onJoin(session)}
             className="shrink-0 rounded-lg bg-accent-500 px-4 py-1.5 text-sm font-bold text-brand-900 hover:bg-accent-550 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {session.full ? 'Full' : joining ? 'Joining…' : 'Join'}
+            {session.full ? 'Full' : joining ? 'Saving…' : 'I’ll attend'}
           </button>
         </div>
         <p className="mt-1.5 text-sm text-slate-700">{formatSessionRange(session.startsAt, session.endsAt)}</p>
@@ -344,8 +344,9 @@ function BookingForm({ moduleId, learnerId, onBooked, onCancel }) {
 }
 
 // A specialist posts an open face-to-face session that anyone who needs the topic can join.
-function OpenSessionForm({ topics, onPosted, onCancel }) {
-  const [moduleId, setModuleId] = useState(topics.length === 1 ? String(topics[0].id) : '');
+// initialModuleId: the topic it was opened for, from "Set face-to-face session" in Modules.
+function OpenSessionForm({ topics, initialModuleId, onPosted, onCancel }) {
+  const [moduleId, setModuleId] = useState(initialModuleId || (topics.length === 1 ? String(topics[0].id) : ''));
   const [slots, setSlots] = useState(null);
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
@@ -379,7 +380,7 @@ function OpenSessionForm({ topics, onPosted, onCancel }) {
       });
       onPosted(response.data.message);
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Unable to post this session.');
+      setError(requestError.response?.data?.message || 'Unable to set this session.');
       setSaving(false);
     }
     return undefined;
@@ -387,9 +388,9 @@ function OpenSessionForm({ topics, onPosted, onCancel }) {
 
   return (
     <section className="mb-8 rounded-2xl border-2 border-brand-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wider text-accent-600">Open face-to-face session</p>
-      <h2 className="mt-1 text-lg font-semibold">Meet everyone who needs a topic</h2>
-      <p className="mb-2 mt-1 text-sm text-slate-500">Beneficiaries who need this topic see it on their Sessions page and can join, even if they aren&apos;t your learners yet.</p>
+      <p className="text-xs font-semibold uppercase tracking-wider text-accent-600">Face-to-face session</p>
+      <h2 className="mt-1 text-lg font-semibold">Meet your learners on a topic</h2>
+      <p className="mb-2 mt-1 text-sm text-slate-500">The learners you accepted on this topic get a notification, see it in their module, and can say they&apos;ll attend.</p>
       {topics.length > 0 && <FreeTimesNote who="You are" slots={slots} />}
       {!topics.length && <p className="text-sm text-slate-600">You don&apos;t teach any topic yet. Choose your topics in My Teaching Plan first.</p>}
       {topics.length > 0 && (
@@ -417,7 +418,7 @@ function OpenSessionForm({ topics, onPosted, onCancel }) {
             <input type="number" min={1} max={500} value={seats} onChange={(event) => setSeats(event.target.value)} placeholder="No limit" className={`${inputClass} w-28`} />
           </label>
           <button type="submit" disabled={saving} className="rounded-lg bg-accent-500 px-4 py-2.5 text-sm font-bold text-brand-900 hover:bg-accent-550 disabled:opacity-50">
-            {saving ? 'Posting…' : 'Post session'}
+            {saving ? 'Saving…' : 'Set session'}
           </button>
           <button type="button" onClick={onCancel} className="px-2 py-2.5 text-sm text-slate-500 hover:text-slate-800">Cancel</button>
         </form>
@@ -441,7 +442,7 @@ export default function Sessions() {
   const [notice, setNotice] = useState('');
   const [showPast, setShowPast] = useState(false);
   const [showAllOnline, setShowAllOnline] = useState(false);
-  const [posting, setPosting] = useState(false);
+  const [posting, setPosting] = useState(isSpecialist && searchParams.has('post'));
   const [joiningId, setJoiningId] = useState(null);
   // Beneficiaries outside the Philippines learn online only (the server says so).
   const [onlineOnly, setOnlineOnly] = useState(false);
@@ -527,13 +528,13 @@ export default function Sessions() {
       <PageHeader
         title="Sessions"
         subtitle={isSpecialist
-          ? 'Face-to-face sessions you book or post, and the online sessions added each time a learner takes a test in your module. Book one-on-one from a topic’s chat in Modules.'
+          ? 'Face-to-face sessions you set for your learners, and the online sessions added each time a learner takes a test in your module.'
           : onlineOnly
             ? 'You live outside the Philippines, so you learn online. An online session is added each time you take a test.'
-            : 'Face-to-face sessions you book or join, and the online sessions added each time you take a test. Book one-on-one from a topic’s chat in Modules.'}
+            : 'Face-to-face sessions your specialists set for you, and the online sessions added each time you take a test.'}
         actions={(
           <>
-            {isSpecialist && <button type="button" onClick={() => setPosting(true)} className={headerPrimaryClass}>+ Open face-to-face session</button>}
+            {isSpecialist && <button type="button" onClick={() => setPosting(true)} className={headerPrimaryClass}>+ Set face-to-face session</button>}
             <Link to="/modules" className={headerButtonClass}>Go to Modules</Link>
           </>
         )}
@@ -544,7 +545,7 @@ export default function Sessions() {
               <>
                 <HeaderStat value={upcoming.length} label="Upcoming" />
                 <HeaderStat value={needsAnswer.length} label="Need your answer" alert={needsAnswer.length > 0} />
-                {!isSpecialist && <HeaderStat value={openToJoin.length} label="Open to join" alert={openToJoin.length > 0} />}
+                {!isSpecialist && <HeaderStat value={openToJoin.length} label="New from your specialists" alert={openToJoin.length > 0} />}
                 <HeaderStat value={held} label="Face-to-face held" />
               </>
             )}
@@ -552,7 +553,8 @@ export default function Sessions() {
           </div>
         )}
       </PageHeader>
-      {bookFor && (
+      {/* Beneficiaries don't book: their specialist sets the sessions. */}
+      {bookFor && isSpecialist && (
         <BookingForm
           moduleId={bookFor}
           learnerId={searchParams.get('learner')}
@@ -563,8 +565,9 @@ export default function Sessions() {
       {posting && (
         <OpenSessionForm
           topics={myTopics}
-          onPosted={(message) => { tell(message); setPosting(false); loadSessions(); }}
-          onCancel={() => setPosting(false)}
+          initialModuleId={searchParams.get('post')}
+          onPosted={(message) => { tell(message); setPosting(false); setSearchParams({}); loadSessions(); }}
+          onCancel={() => { setPosting(false); setSearchParams({}); }}
         />
       )}
       {notice && <p role="status" className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{notice}</p>}
@@ -587,8 +590,8 @@ export default function Sessions() {
 
           {!isSpecialist && openToJoin.length > 0 && (
             <section className="mb-8 rounded-2xl border border-brand-200 bg-brand-50 p-4">
-              <h2 className="font-semibold text-brand-900">Open face-to-face sessions</h2>
-              <p className="mb-3 mt-0.5 text-sm text-slate-600">Posted by specialists for topics you need. Join to save your seat.</p>
+              <h2 className="font-semibold text-brand-900">New face-to-face sessions</h2>
+              <p className="mb-3 mt-0.5 text-sm text-slate-600">Your specialists set these for their learners. Say you&apos;ll attend to save your seat.</p>
               <ul className="space-y-3">
                 {openToJoin.map((s) => <OpenSessionRow key={s.moduleSessionId} session={s} onJoin={handleJoin} joining={joiningId === s.moduleSessionId} />)}
               </ul>
@@ -596,7 +599,7 @@ export default function Sessions() {
           )}
 
           {onlineOnly && (
-            <p className="mb-8 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+            <p className="mb-8 rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-700">
               Face-to-face sessions are for beneficiaries in the Philippines. You learn online: take your topic’s tests, and message your specialist in Modules.
             </p>
           )}
@@ -606,8 +609,8 @@ export default function Sessions() {
               {needsAnswer.length
                 ? <EmptyState icon="calendar" compact title="Nothing else scheduled yet" />
                 : isSpecialist
-                  ? <EmptyState icon="calendar" title="No upcoming face-to-face sessions">Post an open session for everyone who needs a topic, or book one-on-one from a topic&apos;s chat.</EmptyState>
-                  : <EmptyState icon="calendar" title="No upcoming face-to-face sessions" action={{ to: '/modules', label: 'Go to your topics' }}>Join an open session above, or book one-on-one from a topic&apos;s chat.</EmptyState>}
+                  ? <EmptyState icon="calendar" title="No upcoming face-to-face sessions">Set one for your learners with the button above, or from a topic in Modules.</EmptyState>
+                  : <EmptyState icon="calendar" title="No upcoming face-to-face sessions" action={{ to: '/modules', label: 'Go to your topics' }}>Your specialist sets face-to-face sessions. You get a notification when they do.</EmptyState>}
             </div>
           )}
           {days.map((day) => (

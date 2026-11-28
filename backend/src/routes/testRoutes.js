@@ -4,8 +4,9 @@ const { listQuestions, createQuestion, createQuestions, updateQuestion, deleteQu
 
 const router = express.Router();
 
-// Specialists: the pre-test / post-test questions for a topic they teach.
-// /bulk adds many at once (a pasted quiz).
+// Specialists: the pre-test and post-test questions for a topic they teach
+// (each question belongs to one: body.kind = pre | post). /bulk adds many at
+// once (a pasted quiz or a Word file).
 router.get('/', requireAuth, listQuestions);
 router.post('/', requireAuth, createQuestion);
 router.post('/bulk', requireAuth, createQuestions);
@@ -13,7 +14,7 @@ router.put('/:questionId', requireAuth, updateQuestion);
 router.delete('/:questionId', requireAuth, deleteQuestion);
 // Learners: take the pre-test or the post-test (kind = pre | post).
 router.post('/module/:moduleId/:kind', requireAuth, takeTest);
-// Specialists: open a learner's post-test after their face-to-face sessions.
+// Specialists: open a learner's post-test when they're ready.
 router.post('/module/:moduleId/learners/:beneficiaryId/open-post', requireAuth, openPostTest);
 
 module.exports = router;
