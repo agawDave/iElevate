@@ -4,20 +4,22 @@ import { useAuth } from '../context/AuthContext';
 import axiosClient from '../api/axiosClient';
 import AppFooter from '../components/layout/AppFooter';
 import AuthPanel from '../components/auth/AuthPanel';
+import { headerPrimaryClass } from '../components/layout/PageHeader';
 import elevateLogo from '../assets/elevate-logo.png';
+import loginBackground from '../assets/login-background.jpg';
 
 const STEPS = [
   { title: 'Take the pre-assessment', text: 'Tell us your goal and how well you can do a few everyday tasks. Your answers pick the topics you learn.' },
-  { title: 'Learn with a specialist', text: 'Each topic is matched with a specialist who fits your schedule and place, online or face to face.' },
-  { title: 'Earn your certificate', text: 'After your face-to-face sessions, take the post-test, and your certificate goes into your portfolio.' },
+  { title: 'Learn with a specialist', text: 'Apply to a specialist for each topic and study the materials they share. They can also set face-to-face sessions.' },
+  { title: 'Earn your certificate', text: 'Take the post-test when your specialist opens it. Your certificate then goes into your portfolio.' },
 ];
 
 const wrap = 'mx-auto w-full max-w-6xl px-4 sm:px-6';
 
 // The first page people see: what iELEVATE is, how it works and the ELEVATE
-// phases. Log in and Sign up (also /login and /signup) slide in a panel over it.
-// Numbers and phases come from the database. The whole page is iELEVATE navy,
-// with the rising-peak pattern behind the top.
+// phases. Log in and Sign up (also /login and /signup) slide in a card over it.
+// Numbers and phases come from the database. Behind the whole page: the
+// CTU-Tuburan ELEVATE group photo, tinted navy.
 export default function LandingPage() {
   const { user } = useAuth();
   const [facts, setFacts] = useState(null);
@@ -38,9 +40,12 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-brand-600 text-white">
-      <section className="brand-pattern">
-
+    <div className="relative min-h-screen bg-brand-900 text-white">
+      {/* The CTU-Tuburan ELEVATE group photo, softly blurred and tinted navy, behind the whole page. */}
+      <img src={loginBackground} alt="" aria-hidden="true" className="fixed inset-0 h-full w-full scale-105 object-cover blur-[3px]" />
+      <div className="fixed inset-0 bg-gradient-to-b from-brand-900/70 via-brand-900/60 to-brand-900/80" aria-hidden="true" />
+      <div className="relative flex min-h-screen flex-col">
+      <section>
         <header className={`${wrap} flex items-center justify-between gap-4 py-5`}>
           <span className="inline-flex rounded-lg bg-white px-3 py-2">
             <img src={elevateLogo} alt="iELEVATE" className="h-9 w-auto sm:h-11" />
@@ -48,8 +53,7 @@ export default function LandingPage() {
           <nav className="flex items-center gap-1 text-sm font-semibold">
             <a href="#how-it-works" className="hidden rounded-lg px-3 py-2 text-white/85 hover:bg-white/10 hover:text-white md:inline-block">How it works</a>
             <a href="#phases" className="hidden rounded-lg px-3 py-2 text-white/85 hover:bg-white/10 hover:text-white md:inline-block">Phases</a>
-            <Link to="/login" className="rounded-lg px-4 py-2 text-white hover:bg-white/10">Log in</Link>
-            <Link to="/signup" className="ml-1 rounded-lg bg-accent-500 px-4 py-2 font-bold text-brand-900 hover:bg-accent-550">Sign up</Link>
+            <Link to="/login" className="rounded-lg px-3 py-2 text-white hover:bg-white/10">Log in</Link>
           </nav>
         </header>
 
@@ -61,6 +65,10 @@ export default function LandingPage() {
           <p className="mt-4 max-w-xl text-base text-brand-100 sm:text-lg">
             iELEVATE is the online home of CTU-Tuburan&apos;s ELEVATE program. Take a quick pre-assessment, learn the topics you need with a specialist, and earn certificates for your portfolio.
           </p>
+          <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-3">
+            <Link to="/signup" className={headerPrimaryClass}>Get started</Link>
+            <Link to="/login" className="text-sm font-semibold text-white underline-offset-4 hover:underline">I already have an account</Link>
+          </div>
         </div>
       </section>
 
@@ -104,9 +112,10 @@ export default function LandingPage() {
         </section>
       )}
 
-      {/* A darker navy band across the bottom. */}
-      <div className="bg-brand-700">
+      {/* A darker navy band across the bottom (at the bottom of the window on tall screens). */}
+      <div className="mt-auto bg-brand-900/80">
         <div className={wrap}><AppFooter dark /></div>
+      </div>
       </div>
       {authMode && <AuthPanel mode={authMode} />}
     </div>

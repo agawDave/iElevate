@@ -132,6 +132,17 @@ export default function Sidebar() {
   const [incomingMatches, setIncomingMatches] = useState(0);
   const [messageNotification, setMessageNotification] = useState(null);
   const [adminCounts, setAdminCounts] = useState(null);
+  // The admin wrote last in their chat with this user: a red dot on Dashboard (where the chat is).
+  const [adminWaiting, setAdminWaiting] = useState(false);
+
+  // Not polled (the sidebar already polls every 10 seconds, close to the rate
+  // limit): it loads with each page, when the admin writes and when the user replies.
+  function loadAdminWaiting() {
+    if (!user || user.role === 'admin') return;
+    axiosClient.get('/messages/inbox')
+      .then((response) => setAdminWaiting((response.data.data.adminChats || []).some((chat) => String(chat.lastSenderId) !== String(user.id))))
+      .catch(() => {});
+  }
 
   function loadNotifications() {
     if (user?.role === 'admin') {
@@ -151,6 +162,7 @@ export default function Sidebar() {
   useEffect(() => {
     if (!user) return undefined;
     loadNotifications();
+    loadAdminWaiting();
     const interval = window.setInterval(loadNotifications, user.role === 'admin' ? 30000 : 10000);
     // Admin pages announce changes (e.g. a module approved) so badges update at once.
     window.addEventListener('admin-counts-changed', loadNotifications);
@@ -163,23 +175,26 @@ export default function Sidebar() {
   useEffect(() => {
     if (!socket) return undefined;
     const handleNotification = (notification) => {
-      // Topic chats show as dots on Modules, not as a pop-up. The admin's message
-      // pops up and waits on the dashboard. (For admins: a module sent for approval.)
-      if (['module_message', 'module_submitted'].includes(notification.type)) {
+      // Topic chats show as dots on Modules, not as a pop-up. For admins: a module
+      // sent for approval, or a reply to their chat (unread badges, no pop-up).
+      if (notification.type === 'module_message') return;
+      if (notification.type === 'module_submitted' || (notification.type === 'admin_message' && user?.role === 'admin')) {
         loadNotifications();
         return;
       }
+      // The admin's message pops up and waits on the dashboard.
       if (notification.type === 'admin_message') {
         setMessageNotification({ ...notification, moduleTitle: 'iELEVATE', link: '/dashboard' });
+        loadAdminWaiting();
         return;
       }
       if (!['module_session', 'module_application', 'module_review'].includes(notification.type)) return;
       setMessageNotification(notification);
       loadNotifications();
     };
-    // The user replied in a chat: refresh so its reminder goes away at once.
+    // The user replied to the admin (no topic): the Dashboard dot goes away at once.
     const handleMessage = (message) => {
-      if (String(message.senderId) === String(user?.id)) loadNotifications();
+      if (String(message.senderId) === String(user?.id) && !message.moduleId) loadAdminWaiting();
     };
     socket.on('notification:new', handleNotification);
     socket.on('message:new', handleMessage);
@@ -208,8 +223,12 @@ export default function Sidebar() {
   const shownLinks = isAdmin ? ADMIN_LINKS : links.filter((l) => !l.beneficiaryOnly || !isSpecialist);
 
   // The count beside a menu item: new applications on Modules, sessions to
-  // answer, modules waiting for an admin's approval. Unread topic chats show on Modules.
+  // answer, modules waiting for an admin's approval, a red dot on Dashboard while the
+  // admin waits for a reply. Unread topic chats show on Modules.
   function badgeFor(l) {
+    if (l.to === '/dashboard' && adminWaiting) {
+      return <span title="The admin is waiting for your reply" className="h-2.5 w-2.5 rounded-full bg-red-500"><span className="sr-only">The admin is waiting for your reply</span></span>;
+    }
     if (l.to === '/modules' && incomingMatches > 0) return <span title={`${incomingMatches} new`} className="h-5 px-1.5 rounded-full bg-accent-500 text-brand-900 text-[10px] font-bold flex items-center justify-center">{incomingMatches} new</span>;
     if (l.to === '/sessions' && pendingSessions > 0) return <span className="min-w-5 h-5 px-1 rounded-full bg-amber-500 text-white text-[10px] flex items-center justify-center">{pendingSessions}</span>;
     if (l.badge && adminCounts?.[l.badge] > 0) {

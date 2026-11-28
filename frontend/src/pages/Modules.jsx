@@ -19,6 +19,7 @@ import { TopicBand } from '../components/ui/TopicFace';
 import { phaseInfo } from '../lib/topicFaces';
 import { moduleEditorPath, moduleStatusOf, testsSummary } from '../lib/moduleStatus';
 import { useConfirm } from '../context/ConfirmContext';
+import ReplyDot from '../components/ui/ReplyDot';
 
 // The three stages (project-advisor recommendation):
 //   Incoming  - the beneficiary applied; waiting for the specialist to accept
@@ -35,17 +36,6 @@ const BAND_LABELS = { beginner: 'Beginner', developing: 'Developing', proficient
 // A white card holding an empty state.
 function EmptyCard({ children }) {
   return <div className="rounded-2xl border border-stone-200 bg-white">{children}</div>;
-}
-
-// Red dot on the corner of a button: someone is waiting for the user's reply
-// there. It goes away when they reply (not when they just open the chat).
-function ReplyDot({ label = 'waiting for your reply' }) {
-  return (
-    <>
-      <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-red-500 ring-2 ring-white" title={label} aria-hidden="true" />
-      <span className="sr-only"> ({label})</span>
-    </>
-  );
 }
 
 // Where a learner's topic is: apply (not applied yet), incoming, ongoing, completed.

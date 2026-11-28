@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import DirectChatPanel from '../chat/DirectChatPanel';
 import { waitedFor } from '../../lib/sessions';
+import ReplyDot from '../ui/ReplyDot';
 
 // The admin's chat with this beneficiary or specialist, on their dashboard
 // (only once the admin has written). Reply opens the chat.
@@ -41,8 +42,9 @@ export default function AdminMessages() {
               <p className="mt-0.5 line-clamp-2 break-words text-sm italic text-slate-700">&ldquo;{chat.lastMessage}&rdquo;</p>
               <p className="mt-0.5 text-xs text-slate-500">{waiting ? chat.otherUserName : 'You'} · {waitedFor(String(chat.lastMessageAt).replace(' ', 'T'))} ago</p>
             </div>
-            <button type="button" onClick={() => setOpen(chat)} className={waiting ? 'shrink-0 rounded-lg bg-accent-500 px-4 py-2 text-sm font-semibold text-brand-900 hover:bg-accent-550' : 'shrink-0 rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-stone-50'}>
+            <button type="button" onClick={() => setOpen(chat)} className={waiting ? 'relative shrink-0 rounded-lg bg-accent-500 px-4 py-2 text-sm font-semibold text-brand-900 hover:bg-accent-550' : 'shrink-0 rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-stone-50'}>
               {waiting ? 'Reply' : 'Open chat'}
+              {waiting && <ReplyDot label="The admin is waiting for your reply" />}
             </button>
           </section>
         );

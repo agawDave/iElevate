@@ -5,7 +5,7 @@ import bsitSeal from '../../assets/seal-ctu-tuburan-bsit.webp';
 // seals, who runs ELEVATE, and the tagline. Not printed. dark: in the landing page's navy band.
 export default function AppFooter({ dark = false }) {
   return (
-    <footer className={`mx-auto mt-12 flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-3 py-5 print:hidden ${dark ? '' : 'mt-12 border-t border-stone-200'}`}>
+    <footer className={`mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-3 py-5 print:hidden ${dark ? '' : 'mt-12 border-t border-stone-200'}`}>
       <div className="flex items-center gap-3.5">
         <span className="flex shrink-0 gap-1.5">
           <img src={ctuSeal} alt="Cebu Technological University seal" width="40" height="40" className="h-10 w-10 rounded-full" />

@@ -1,36 +1,29 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import elevateLogo from '../../assets/elevate-logo.png';
 
-// Log in and Sign up, in a panel that slides in from the right over the landing
-// page (/login and /signup). Switching between them stays in the panel.
+// Log in and Sign up (/login and /signup): a small frosted-glass card that slides
+// in from the right over the dimmed landing page. Switching between them stays
+// in the card; clicking outside or Escape goes back to the landing page.
 
-const ICONS = {
-  email: <path d="M16 12a4 4 0 1 0-8 0 4 4 0 0 0 8 0Zm0 0v1.5a2.5 2.5 0 0 0 5 0V12a9 9 0 1 0-4.5 7.8" />,
-  password: <path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9" />,
-  person: <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 14 0" />,
-  school: <path d="M3 9.5 12 5l9 4.5-9 4.5-9-4.5Zm3 2v4.5c0 1.4 2.7 3 6 3s6-1.6 6-3v-4.5" />,
-};
-
-// A rounded field with an icon on the left (and an optional button on the right).
-// The label is kept for screen readers; the icon and placeholder show it on screen.
-function PillInput({ id, icon, label, trailing, ...inputProps }) {
+// A labelled field: white text label, white box (an optional button sits inside on the right).
+function Field({ id, label, hint, trailing, ...inputProps }) {
   return (
-    <div className="flex items-center overflow-hidden rounded-full bg-white/85 focus-within:bg-white focus-within:ring-2 focus-within:ring-white">
-      <label htmlFor={id} className="sr-only">{label}</label>
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center bg-slate-300/60 text-slate-600" aria-hidden="true">
-        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{ICONS[icon]}</svg>
-      </span>
-      <input id={id} {...inputProps} className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-slate-800 outline-none placeholder:text-slate-500" />
-      {trailing}
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-white">
+        {label}{hint && <span className="font-normal text-white/70"> {hint}</span>}
+      </label>
+      <div className="relative mt-1">
+        <input id={id} {...inputProps} className={`block w-full rounded-lg border-0 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-accent-500 ${trailing ? 'pr-16' : ''}`} />
+        {trailing}
+      </div>
     </div>
   );
 }
 
 // iELEVATE's main-action orange, with navy text (white on this orange is too faint to read).
-const buttonClass = 'mx-auto block rounded bg-accent-500 px-7 py-2.5 text-sm font-bold uppercase tracking-wider text-brand-900 shadow transition hover:bg-accent-550 focus:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50';
-const errorClass = 'rounded border border-red-300/50 bg-red-600/40 px-3 py-2 text-sm text-white';
+const buttonClass = 'w-full rounded-lg bg-accent-500 px-4 py-2.5 text-sm font-bold text-brand-900 shadow transition hover:bg-accent-550 focus:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50';
+const errorClass = 'rounded-lg border border-red-300/50 bg-red-600/40 px-3 py-2 text-sm text-white';
 const linkClass = 'font-semibold text-white underline underline-offset-2 hover:text-accent-500';
 
 function LoginForm() {
@@ -65,23 +58,22 @@ function LoginForm() {
   return (
     <>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <PillInput
+        <Field
           id="login-email"
-          icon="email"
           label="Email address"
           type="email"
+          autoComplete="email"
           placeholder="you@example.com"
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
           required
           autoFocus
         />
-        <PillInput
+        <Field
           id="login-password"
-          icon="password"
           label="Password"
           type={showPassword ? 'text' : 'password'}
-          placeholder="••••••••"
+          autoComplete="current-password"
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
           required
@@ -89,7 +81,8 @@ function LoginForm() {
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              className="shrink-0 px-4 text-xs font-semibold text-brand-700 hover:underline"
+              aria-pressed={showPassword}
+              className="absolute inset-y-0 right-0 rounded-r-lg px-3 text-xs font-semibold text-brand-600 hover:bg-brand-50"
             >
               {showPassword ? 'Hide' : 'Show'}
             </button>
@@ -100,7 +93,7 @@ function LoginForm() {
 
         <div className="pt-1">
           <button type="submit" disabled={submitting} className={buttonClass}>
-            {submitting ? 'Signing in…' : 'Sign in'}
+            {submitting ? 'Logging in…' : 'Log in'}
           </button>
         </div>
       </form>
@@ -165,9 +158,9 @@ function SignupForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
+    <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <p className="mb-2 text-sm font-medium text-white">I want to join as a</p>
+        <p className="mb-1.5 text-sm font-medium text-white">I want to join as a</p>
         <div className="grid grid-cols-2 gap-3">
           {ROLES.map((r) => {
             const selected = form.userType === r.value;
@@ -177,9 +170,9 @@ function SignupForm() {
                 type="button"
                 aria-pressed={selected}
                 onClick={() => setForm({ ...form, userType: r.value })}
-                // Selected: iELEVATE's "Navy 50" tint with navy border and text (orange stays for the main button).
-                className={`relative rounded-md border-2 px-3 py-2 text-left transition ${
-                  selected ? 'border-brand-600 bg-brand-50 text-brand-600' : 'border-white/30 bg-white/10 text-white hover:bg-white/20'
+                // Selected: white with navy text (orange stays for the main button).
+                className={`relative rounded-xl border px-3 py-2.5 text-left transition ${
+                  selected ? 'border-white bg-white text-brand-700' : 'border-white/30 bg-white/10 text-white hover:bg-white/20'
                 }`}
               >
                 {selected && (
@@ -188,49 +181,48 @@ function SignupForm() {
                   </span>
                 )}
                 <p className="pr-4 text-sm font-semibold">{r.label}</p>
-                <p className={`text-xs ${selected ? 'text-brand-500' : 'text-white/80'}`}>{r.desc}</p>
+                <p className={`mt-0.5 text-xs ${selected ? 'text-brand-600' : 'text-white/80'}`}>{r.desc}</p>
               </button>
             );
           })}
         </div>
       </div>
 
-      <PillInput
+      <Field
         id="signup-name"
-        icon="person"
         label="Full name"
         type="text"
-        placeholder="Full name"
+        autoComplete="name"
         value={form.fullName}
         onChange={(e) => setForm({ ...form, fullName: e.target.value })}
         required
         autoFocus
       />
-      <PillInput
+      <Field
         id="signup-school"
-        icon="school"
-        label="School / Organization (optional)"
+        label="School or organization"
+        hint="(optional)"
         type="text"
-        placeholder="School / Organization (optional)"
+        autoComplete="organization"
         value={form.schoolOrOrg}
         onChange={(e) => setForm({ ...form, schoolOrOrg: e.target.value })}
       />
-      <PillInput
+      <Field
         id="signup-email"
-        icon="email"
         label="Email address"
         type="email"
-        placeholder="Email address"
+        autoComplete="email"
+        placeholder="you@example.com"
         value={form.email}
         onChange={(e) => setForm({ ...form, email: e.target.value })}
         required
       />
-      <PillInput
+      <Field
         id="signup-password"
-        icon="password"
-        label="Password (min 8 characters)"
+        label="Password"
+        hint="(at least 8 characters)"
         type="password"
-        placeholder="Password (min 8 characters)"
+        autoComplete="new-password"
         value={form.password}
         onChange={(e) => setForm({ ...form, password: e.target.value })}
         required
@@ -249,8 +241,8 @@ function SignupForm() {
 }
 
 const COPY = {
-  login: { title: 'Welcome back', subtitle: 'Sign in to your iELEVATE account', ask: 'Don’t have an account?', switchTo: '/signup', switchLabel: 'Create your free account' },
-  signup: { title: 'Create your account', subtitle: 'Join iELEVATE and start your skill journey', ask: 'Already have an account?', switchTo: '/login', switchLabel: 'Sign in' },
+  login: { title: 'Welcome back', subtitle: 'Log in to your iELEVATE account.', ask: 'Don’t have an account?', switchTo: '/signup', switchLabel: 'Sign up' },
+  signup: { title: 'Create your account', subtitle: 'Join iELEVATE and start your skill journey.', ask: 'Already have an account?', switchTo: '/login', switchLabel: 'Log in' },
 };
 
 // mode: 'login' or 'signup'. Closing goes back to the landing page (/).
@@ -271,27 +263,26 @@ export default function AuthPanel({ mode }) {
   }, [navigate]);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-labelledby="auth-panel-title">
-      <button type="button" tabIndex={-1} aria-label="Close" onClick={close} className="absolute inset-0 cursor-default bg-slate-900/40" />
-      {/* Still scrolls on short screens, without a scroll bar. */}
-      <section className="drawer-enter relative flex h-full w-full max-w-md flex-col overflow-y-auto bg-brand-700 [scrollbar-width:none] px-6 py-6 text-white shadow-2xl sm:px-8">
-        <div className="flex items-center justify-between">
-          <span className="inline-flex rounded-md bg-white px-2.5 py-1.5">
-            <img src={elevateLogo} alt="iELEVATE" className="h-8 w-auto" />
-          </span>
-          <button type="button" onClick={close} aria-label="Close" className="rounded-lg px-2 text-2xl leading-none text-white/80 hover:bg-white/10 hover:text-white">×</button>
-        </div>
-        {/* Keyed by mode, so switching between Log in and Sign up slides the new one in. */}
-        <div key={mode} className="slide-enter my-auto py-8">
-          <h2 id="auth-panel-title" className="text-lg font-normal uppercase tracking-[0.18em]">{copy.title}</h2>
-          <p className="mt-1.5 text-sm text-white/85">{copy.subtitle}</p>
-          <div className="mt-6">{mode === 'login' ? <LoginForm /> : <SignupForm />}</div>
-          <p className="mt-5 text-sm text-white/85">
-            {copy.ask}{' '}
-            <button type="button" onClick={() => navigate(copy.switchTo, { replace: true })} className={linkClass}>{copy.switchLabel}</button>
-          </p>
-        </div>
-      </section>
+    <div className="fixed inset-0 z-50 overflow-y-auto [scrollbar-width:none]" role="dialog" aria-modal="true" aria-labelledby="auth-panel-title">
+      <button type="button" tabIndex={-1} aria-label="Close" onClick={close} className="fixed inset-0 cursor-default bg-slate-900/40" />
+      {/* Still scrolls on short screens; clicks beside the card reach the close layer. */}
+      <div className="pointer-events-none relative flex min-h-full items-center justify-end px-4 py-8 sm:pr-10">
+        <section className="drawer-enter pointer-events-auto w-full max-w-sm rounded-xl border border-white/25 bg-white/15 px-6 py-6 text-white shadow-2xl backdrop-blur-md sm:px-7">
+          {/* Keyed by mode, so switching between Log in and Sign up slides the new one in. */}
+          <div key={mode} className="slide-enter">
+            <div className="flex items-start justify-between gap-3">
+              <h2 id="auth-panel-title" className="text-2xl font-extrabold tracking-tight">{copy.title}</h2>
+              <button type="button" onClick={close} aria-label="Close" className="-mr-2 rounded-lg px-2 text-2xl leading-none text-white/80 hover:bg-white/10 hover:text-white">×</button>
+            </div>
+            <p className="mt-1 text-sm text-white/85">{copy.subtitle}</p>
+            <div className="mt-5">{mode === 'login' ? <LoginForm /> : <SignupForm />}</div>
+            <p className="mt-5 text-center text-sm text-white/85">
+              {copy.ask}{' '}
+              <button type="button" onClick={() => navigate(copy.switchTo, { replace: true })} className={linkClass}>{copy.switchLabel}</button>
+            </p>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
